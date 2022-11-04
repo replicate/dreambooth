@@ -1,6 +1,14 @@
+import os
+import shutil
+import tempfile
+from zipfile import ZipFile
+from subprocess import call
+from argparse import Namespace
 from cog import BasePredictor, Input, Path
+from huggingface_hub.hf_api import HfFolder
+import torch
 
-from .dreambooth import main
+from dreambooth import main
 
 
 class Predictor(BasePredictor):
@@ -13,9 +21,26 @@ class Predictor(BasePredictor):
             description="Model identifier from huggingface.co/models",
             default="runwayml/stable-diffusion-v1-5",
         ),
+        huggingface_token: str = Input(
+            description="We cached runwayml/stable-diffusion-v1-5, but you probably need to provide your huggingface token to download the model if you are training with other models.",
+            default=None,
+        ),
+        pretrained_vae: str = Input(
+            description="Pretrained vae or vae identifier from huggingface.co/models",
+            default=None,
+        ),
         revision: str = Input(
             description="Revision of pretrained model identifier from huggingface.co/models",
+            choices=["fp16"],
             default=None,
+        ),
+        mixed_precision: str = Input(
+            description="Whether to use mixed precision. Choose"
+            "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."
+            "and an Nvidia Ampere GPU.",
+            choices=["fp16", "bf16", "no"],
+            # default="fp16",
+            default="no",
         ),
         tokenizer_name: str = Input(
             description="Pretrained tokenizer name or path if not the same as model_name",
@@ -24,13 +49,45 @@ class Predictor(BasePredictor):
         instance_data: Path = Input(
             description="A ZIP file containing the training data of instance images",
         ),
-        class_data_dir: Path = Input(
+        class_data: Path = Input(
             description="A ZIP file containing the training data of class images",
             default=None,
         ),
+        instance_prompt: str = Input(
+            description="The prompt with identifier specifying the instance",
+            default=None,
+        ),
+        class_prompt: str = Input(
+            description="The prompt to specify images in the same class as provided instance images.",
+            default=None,
+        ),
+        save_sample_prompt: str = Input(
+            description="The prompt used to generate sample outputs to save.",
+            default=None,
+        ),
+        save_sample_negative_prompt: str = Input(
+            description="The negative prompt used to generate sample outputs to save.",
+            default=None,
+        ),
+        n_save_sample: int = Input(
+            description="The number of samples to save.",
+            default=4,
+        ),
+        save_guidance_scale: float = Input(
+            description="CFG for save sample.",
+            default=7.5,
+        ),
+        save_infer_steps: int = Input(
+            description="The number of inference steps for save sample.",
+            default=50,
+        ),
+        pad_tokens: bool = Input(
+            description="Flag to pad tokens to length 77.",
+            default=False,
+        ),
         with_prior_preservation: bool = Input(
             description="Flag to add prior preservation loss.",
-            default=False,
+            default=True,
         ),
         prior_loss_weight: float = Input(
             description="Weight of prior preservation loss.",
@@ -39,9 +96,9 @@ class Predictor(BasePredictor):
         num_class_images: int = Input(
             description="Minimal class images for prior preservation loss. If not have enough images, additional images will be"
             " sampled with class_prompt.",
-            default=100,
+            default=200,
         ),
-        seed: int = Input(description="A seed for reproducible training", default=None),
+        seed: int = Input(description="A seed for reproducible training", default=1337),
         resolution: int = Input(
             description="The resolution for input images. All the images in the train/validation dataset will be resized to this"
             " resolution.",
@@ -57,7 +114,7 @@ class Predictor(BasePredictor):
         ),
         train_batch_size: int = Input(
             description="Batch size (per device) for the training dataloader.",
-            default=4,
+            default=1,
         ),
         sample_batch_size: int = Input(
             description="Batch size (per device) for sampling images.",
@@ -66,15 +123,15 @@ class Predictor(BasePredictor):
         num_train_epochs: int = Input(default=1),
         max_train_steps: int = Input(
             description="Total number of training steps to perform.  If provided, overrides num_train_epochs.",
-            default=None,
+            default=200,
         ),
         gradient_accumulation_steps: int = Input(
             description="Number of updates steps to accumulate before performing a backward/update pass.",
-            default=1,
+            default=2,
         ),
         gradient_checkpointing: bool = Input(
-            help="Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.",
-            default=False,
+            description="Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.",
+            default=True,
         ),
         learning_rate: float = Input(
             description="Initial learning rate (after the potential warmup period) to use.",
@@ -98,19 +155,11 @@ class Predictor(BasePredictor):
         ),
         lr_warmup_steps: int = Input(
             description="Number of steps for the warmup in the lr scheduler.",
-            default=500,
+            default=0,
         ),
         use_8bit_adam: bool = Input(
             description="Whether or not to use 8-bit Adam from bitsandbytes.",
-            default=False,
-        ),
-        attn_only: bool = Input(
-            description="Only train U-Net cross-attention layers",
-            default=False,
-        ),
-        use_ema: bool = Input(
-            description="Whether to use EMA model.",
-            default=False,
+            default=True,
         ),
         adam_beta1: float = Input(
             default=0.9,
@@ -132,48 +181,108 @@ class Predictor(BasePredictor):
             default=1.0,
             description="Max gradient norm.",
         ),
-        mixed_precision: str = Input(
-            description="Whether to use mixed precision. Choose"
-            "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."
-            "and an Nvidia Ampere GPU.",
-            choices=["fp16", "bf16", "no"],
-            default="no",
+        save_interval: int = Input(
+            default=10000,
+            description="Save weights every N steps.",
         ),
     ) -> Path:
-        # TODO: unzip instance_data and class_data_dir
+        if huggingface_token:
+            HfFolder.save_token(huggingface_token)
 
-        main(
-            pretrained_model=pretrained_model,
-            revision=revision,
-            tokenizer_name=tokenizer_name,
-            instance_data=instance_data,
-            class_data_dir=class_data_dir,
-            with_prior_preservation=with_prior_preservation,
-            prior_loss_weight=prior_loss_weight,
-            num_class_images=num_class_images,
-            seed=seed,
-            resolution=resolution,
-            center_crop=center_crop,
-            train_text_encoder=train_text_encoder,
-            train_batch_size=train_batch_size,
-            sample_batch_size=sample_batch_size,
-            num_train_epochs=num_train_epochs,
-            max_train_steps=max_train_steps,
-            gradient_accumulation_steps=gradient_accumulation_steps,
-            gradient_checkpointing=gradient_checkpointing,
-            learning_rate=learning_rate,
-            scale_lr=scale_lr,
-            lr_scheduler=lr_scheduler,
-            lr_warmup_steps=lr_warmup_steps,
-            use_8bit_adam=use_8bit_adam,
-            attn_only=attn_only,
-            use_ema=use_ema,
-            adam_beta1=adam_beta1,
-            adam_beta2=adam_beta2,
-            adam_weight_decay=adam_weight_decay,
-            adam_epsilon=adam_epsilon,
-            max_grad_norm=max_grad_norm,
-            mixed_precision=mixed_precision,
-        )
+        cog_instance_data = "cog_instance_data"
+        cog_class_data = "cog_class_data"
+        cog_output_dir = "cog_out"
+        for path in [cog_instance_data, cog_output_dir, cog_class_data]:
+            if os.path.exists(path):
+                shutil.rmtree(path)
+            os.makedirs(path)
 
-        # TODO: return result (is it just a single file? or multiple files? could be an output object with multiple files, or a zip, or something)
+        with ZipFile(str(instance_data), "r") as zip_ref:
+            zip_ref.extractall(cog_instance_data)
+            if os.path.exists(os.path.join(cog_instance_data, "__MACOSX")):
+                shutil.rmtree(os.path.join(cog_instance_data, "__MACOSX"))
+        if class_data is not None:
+            with ZipFile(str(class_data), "r") as zip_ref:
+                zip_ref.extractall(cog_class_data)
+            if os.path.exists(os.path.join(cog_class_data, "__MACOSX")):
+                shutil.rmtree(os.path.join(cog_class_data, "__MACOSX"))
+
+        args = {
+            "pretrained_model_name_or_path": pretrained_model,
+            "huggingface_token": huggingface_token,
+            "pretrained_vae_name_or_path": pretrained_vae,
+            "revision": revision,
+            "tokenizer_name": tokenizer_name,
+            "instance_data_dir": cog_instance_data,
+            "class_data_dir": cog_class_data,
+            "instance_prompt": instance_prompt,
+            "class_prompt": class_prompt,
+            "save_sample_prompt": save_sample_prompt,
+            "save_sample_negative_prompt": save_sample_negative_prompt,
+            "n_save_sample": n_save_sample,
+            "save_guidance_scale": save_guidance_scale,
+            "save_infer_steps": save_infer_steps,
+            "pad_tokens": pad_tokens,
+            "with_prior_preservation": with_prior_preservation,
+            "prior_loss_weight": prior_loss_weight,
+            "num_class_images": num_class_images,
+            "seed": seed,
+            "resolution": resolution,
+            "center_crop": center_crop,
+            "train_text_encoder": train_text_encoder,
+            "train_batch_size": train_batch_size,
+            "sample_batch_size": sample_batch_size,
+            "num_train_epochs": num_train_epochs,
+            "max_train_steps": max_train_steps,
+            "gradient_accumulation_steps": gradient_accumulation_steps,
+            "gradient_checkpointing": gradient_checkpointing,
+            "learning_rate": learning_rate,
+            "scale_lr": scale_lr,
+            "lr_scheduler": lr_scheduler,
+            "lr_warmup_steps": lr_warmup_steps,
+            "use_8bit_adam": use_8bit_adam,
+            "adam_beta1": adam_beta1,
+            "adam_beta2": adam_beta2,
+            "adam_weight_decay": adam_weight_decay,
+            "adam_epsilon": adam_epsilon,
+            "max_grad_norm": max_grad_norm,
+            "push_to_hub": False,
+            "hub_token": None,
+            "hub_model_id": None,
+            "save_interval": save_interval,
+            "save_min_steps": 0,
+            "mixed_precision": mixed_precision,
+            "not_cache_latents": False,
+            "local_rank": -1,
+            "output_dir": cog_output_dir,
+            "concepts_list": None,
+            "logging_dir": "logs",
+            "log_interval": 10,
+        }
+
+        args = Namespace(**args)
+
+        main(args)   
+
+        out_path =  "output.zip"
+
+        # directory = Path(cog_output_dir)
+        directory = Path("stable-diffusion-v1-5-cache")
+        with ZipFile(out_path, "w") as zip:
+            for file_path in directory.rglob("*"):
+                print(file_path)
+                zip.write(file_path, arcname=file_path.relative_to(directory))
+
+        # run_cmd(f"zip -r {out_path} {cog_output_dir}")
+
+        # shutil.make_archive(out_path, 'zip', base_dir=cog_output_dir)
+
+        return Path(out_path)
+
+
+def run_cmd(command):
+    try:
+        call(command, shell=True)
+    except KeyboardInterrupt:
+        print("Process interrupted")
+        sys.exit(1)
