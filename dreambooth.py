@@ -31,6 +31,9 @@ torch.backends.cudnn.benchmark = True
 
 logger = get_logger(__name__)
 
+cache_dir = "stable-diffusion-v1-5-cache"
+vae_cache_dir = "sd-vae-ft-mse-cache"
+
 
 def parse_args(input_args=None):
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
@@ -130,7 +133,7 @@ def parse_args(input_args=None):
     parser.add_argument(
         "--num_class_images",
         type=int,
-        default=100,
+        default=50,
         help=(
             "Minimal class images for prior preservation loss. If not have enough images, additional images will be"
             " sampled with class_prompt."
@@ -440,18 +443,23 @@ def main(args):
             cur_class_images = len(list(class_images_dir.iterdir()))
 
             if cur_class_images < args.num_class_images:
-                torch_dtype = torch.float16 if accelerator.device.type == "cuda" else torch.float32
+                # torch_dtype = torch.float16 if accelerator.device.type == "cuda" else torch.float32
+                torch_dtype = torch.float16
                 if pipeline is None:
                     pipeline = StableDiffusionPipeline.from_pretrained(
                         args.pretrained_model_name_or_path,
                         vae=AutoencoderKL.from_pretrained(
                             args.pretrained_vae_name_or_path or args.pretrained_model_name_or_path,
                             subfolder=None if args.pretrained_vae_name_or_path else "vae",
-                            revision=None if args.pretrained_vae_name_or_path else args.revision
+                            revision=None if args.pretrained_vae_name_or_path else args.revision,
+                            cache_dir=vae_cache_dir,
+                            local_files_only=True,
                         ),
                         torch_dtype=torch_dtype,
                         safety_checker=None,
-                        revision=args.revision
+                        revision=args.revision,
+                        cache_dir=cache_dir,
+                        local_files_only=True,
                     )
                     pipeline.set_progress_bar_config(disable=True)
                     pipeline.to(accelerator.device)
@@ -490,6 +498,8 @@ def main(args):
             args.pretrained_model_name_or_path,
             subfolder="tokenizer",
             revision=args.revision,
+            cache_dir=cache_dir,
+            local_files_only=True,
         )
 
     # Load models and create wrapper for stable diffusion
@@ -497,16 +507,22 @@ def main(args):
         args.pretrained_model_name_or_path,
         subfolder="text_encoder",
         revision=args.revision,
+        cache_dir=cache_dir,
+        local_files_only=True,
     )
     vae = AutoencoderKL.from_pretrained(
         args.pretrained_model_name_or_path,
         subfolder="vae",
         revision=args.revision,
+        cache_dir=cache_dir,
+        local_files_only=True,
     )
     unet = UNet2DConditionModel.from_pretrained(
         args.pretrained_model_name_or_path,
         subfolder="unet",
         revision=args.revision,
+        cache_dir=cache_dir,
+        local_files_only=True,
     )
 
     vae.requires_grad_(False)
@@ -547,7 +563,12 @@ def main(args):
         eps=args.adam_epsilon,
     )
 
-    noise_scheduler = DDPMScheduler.from_config(args.pretrained_model_name_or_path, subfolder="scheduler")
+    noise_scheduler = DDPMScheduler.from_config(
+        args.pretrained_model_name_or_path, 
+        subfolder="scheduler",        
+        cache_dir=cache_dir,
+        local_files_only=True
+    )
 
     train_dataset = DreamBoothDataset(
         concepts_list=args.concepts_list,
@@ -671,7 +692,12 @@ def main(args):
             if args.train_text_encoder:
                 text_enc_model = accelerator.unwrap_model(text_encoder)
             else:
-                text_enc_model = CLIPTextModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision)
+                text_enc_model = CLIPTextModel.from_pretrained(
+                    args.pretrained_model_name_or_path, 
+                    subfolder="text_encoder", 
+                    revision=args.revision, 
+                    cache_dir=cache_dir,
+                    local_files_only=True,)
             scheduler = DDIMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", clip_sample=False, set_alpha_to_one=False)
             pipeline = StableDiffusionPipeline.from_pretrained(
                 args.pretrained_model_name_or_path,
@@ -680,12 +706,16 @@ def main(args):
                 vae=AutoencoderKL.from_pretrained(
                     args.pretrained_vae_name_or_path or args.pretrained_model_name_or_path,
                     subfolder=None if args.pretrained_vae_name_or_path else "vae",
-                    revision=None if args.pretrained_vae_name_or_path else args.revision
+                    revision=None if args.pretrained_vae_name_or_path else args.revision,
+                    cache_dir=vae_cache_dir,
+                    local_files_only=True
                 ),
                 safety_checker=None,
                 scheduler=scheduler,
                 torch_dtype=torch.float16,
                 revision=args.revision,
+                cache_dir=cache_dir,
+                local_files_only=True
             )
             save_dir = os.path.join(args.output_dir, f"{step}")
             pipeline.save_pretrained(save_dir)

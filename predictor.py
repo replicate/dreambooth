@@ -5,7 +5,7 @@ from zipfile import ZipFile
 from subprocess import call
 from argparse import Namespace
 from cog import BasePredictor, Input, Path
-from huggingface_hub.hf_api import HfFolder
+# from huggingface_hub.hf_api import HfFolder
 import torch
 
 from dreambooth import main
@@ -17,34 +17,34 @@ class Predictor(BasePredictor):
 
     def predict(
         self,
-        pretrained_model: str = Input(
-            description="Model identifier from huggingface.co/models",
-            default="runwayml/stable-diffusion-v1-5",
-        ),
-        huggingface_token: str = Input(
-            description="Provide your huggingface token to download the models.",
-            default=None,
-        ),
-        pretrained_vae: str = Input(
-            description="Pretrained vae or vae identifier from huggingface.co/models",
-            default="stabilityai/sd-vae-ft-mse",
-        ),
-        revision: str = Input(
-            description="Revision of pretrained model identifier from huggingface.co/models",
-            choices=["fp16", "None"],
-            default="fp16",
-        ),
-        mixed_precision: str = Input(
-            description="Whether to use mixed precision. Choose"
-            "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."
-            "and an Nvidia Ampere GPU.",
-            choices=["fp16", "bf16", "no"],
-            default="fp16",
-        ),
-        tokenizer_name: str = Input(
-            description="Pretrained tokenizer name or path if not the same as model_name",
-            default=None,
-        ),
+        # pretrained_model: str = Input(
+        #     description="Model identifier from huggingface.co/models",
+        #     default="runwayml/stable-diffusion-v1-5",
+        # ),
+        # huggingface_token: str = Input(
+        #     description="Provide your huggingface token to download the models.",
+        #     default=None,
+        # ),
+        # pretrained_vae: str = Input(
+        #     description="Pretrained vae or vae identifier from huggingface.co/models",
+        #     default="stabilityai/sd-vae-ft-mse",
+        # ),
+        # revision: str = Input(
+        #     description="Revision of pretrained model identifier from huggingface.co/models",
+        #     choices=["fp16", "None"],
+        #     default="fp16",
+        # ),
+        # mixed_precision: str = Input(
+        #     description="Whether to use mixed precision. Choose"
+        #     "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."
+        #     "and an Nvidia Ampere GPU.",
+        #     choices=["fp16", "bf16", "no"],
+        #     default="fp16",
+        # ),
+        # tokenizer_name: str = Input(
+        #     description="Pretrained tokenizer name or path if not the same as model_name",
+        #     default=None,
+        # ),
         instance_prompt: str = Input(
             description="The prompt with identifier specifying the instance",
             default=None,
@@ -59,10 +59,6 @@ class Predictor(BasePredictor):
         class_data: Path = Input(
             description="A ZIP file containing the training data of class images. Images will be generated if you do not provide.",
             default=None,
-        ),
-        new_class_data: bool = Input(
-            description="Only relevant if you have not provided class_data. Set to True if you are using different class_prompt so that a new set of images will be generated",
-            default=True,
         ),
         save_sample_prompt: str = Input(
             description="The prompt used to generate sample outputs to save.",
@@ -189,21 +185,17 @@ class Predictor(BasePredictor):
             description="Save weights every N steps.",
         ),
     ) -> Path:
-        if huggingface_token:
-            HfFolder.save_token(huggingface_token)
+    
+        # if huggingface_token:
+        #     HfFolder.save_token(huggingface_token)
 
         cog_instance_data = "cog_instance_data"
         cog_class_data = "cog_class_data"
         cog_output_dir = "cog_out"
-        for path in [cog_instance_data, cog_output_dir]:
+        for path in [cog_instance_data, cog_output_dir, cog_class_data]:
             if os.path.exists(path):
                 shutil.rmtree(path)
             os.makedirs(path)
-
-        if os.path.exists(cog_class_data):
-            if new_class_data:
-                shutil.rmtree(cog_class_data)
-        os.makedirs(cog_class_data)
 
         with ZipFile(str(instance_data), "r") as zip_ref:
             zip_ref.extractall(cog_instance_data)
@@ -215,12 +207,12 @@ class Predictor(BasePredictor):
             if os.path.exists(os.path.join(cog_class_data, "__MACOSX")):
                 shutil.rmtree(os.path.join(cog_class_data, "__MACOSX"))
 
+        # some settings are fixed for the demo
         args = {
-            "pretrained_model_name_or_path": pretrained_model,
-            "huggingface_token": huggingface_token,
-            "pretrained_vae_name_or_path": pretrained_vae,
-            "revision": None if revision == "None" else revision,
-            "tokenizer_name": tokenizer_name,
+            "pretrained_model_name_or_path": "runwayml/stable-diffusion-v1-5",
+            "pretrained_vae_name_or_path": "stabilityai/sd-vae-ft-mse",
+            "revision": "fp16",
+            "tokenizer_name": None,
             "instance_data_dir": cog_instance_data,
             "class_data_dir": cog_class_data,
             "instance_prompt": instance_prompt,
@@ -259,7 +251,7 @@ class Predictor(BasePredictor):
             "hub_model_id": None,
             "save_interval": save_interval,
             "save_min_steps": 0,
-            "mixed_precision": mixed_precision,
+            "mixed_precision": "fp16",
             "not_cache_latents": False,
             "local_rank": -1,
             "output_dir": cog_output_dir,
