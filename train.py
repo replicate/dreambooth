@@ -10,7 +10,7 @@ def train():
   model = replicate.models.get(MODEL_NAME)
   version = model.versions.get(MODEL_VERSION)
 
-  # TODO: collect image files from /data directory to use as input
+  # TODO: use data.zip as input
   return version.predict(text="GitHub Actions")
 
 if __name__ == "__main__":

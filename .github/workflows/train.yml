@@ -17,10 +17,15 @@ jobs:
         run: |
           sudo curl -o /usr/local/bin/cog -L https://github.com/replicate/cog/releases/latest/download/cog_`uname -s`_`uname -m`
           sudo chmod +x /usr/local/bin/cog
-      - name: Run Cog
+      - name: Prepare training data
         run: |
-          cog --version
-          cog
+          NUM_IMAGES=$(find data -type f  -exec file {} \+ | grep -c -i 'image')
+          if [ "$NUM_IMAGES" == "0" ]
+          then
+            echo "No images found in data directory"
+            exit 1
+          fi
+          zip -r data.zip data
       - name: Train model
         env:
           # Find this at https://replicate.com/account
