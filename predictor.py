@@ -22,35 +22,27 @@ class Predictor(BasePredictor):
             default="runwayml/stable-diffusion-v1-5",
         ),
         huggingface_token: str = Input(
-            description="We cached runwayml/stable-diffusion-v1-5, but you probably need to provide your huggingface token to download the model if you are training with other models.",
+            description="Provide your huggingface token to download the models.",
             default=None,
         ),
         pretrained_vae: str = Input(
             description="Pretrained vae or vae identifier from huggingface.co/models",
-            default=None,
+            default="stabilityai/sd-vae-ft-mse",
         ),
         revision: str = Input(
             description="Revision of pretrained model identifier from huggingface.co/models",
-            choices=["fp16"],
-            default=None,
+            choices=["fp16", "None"],
+            default="fp16",
         ),
         mixed_precision: str = Input(
             description="Whether to use mixed precision. Choose"
             "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."
             "and an Nvidia Ampere GPU.",
             choices=["fp16", "bf16", "no"],
-            # default="fp16",
-            default="no",
+            default="fp16",
         ),
         tokenizer_name: str = Input(
             description="Pretrained tokenizer name or path if not the same as model_name",
-            default=None,
-        ),
-        instance_data: Path = Input(
-            description="A ZIP file containing the training data of instance images",
-        ),
-        class_data: Path = Input(
-            description="A ZIP file containing the training data of class images",
             default=None,
         ),
         instance_prompt: str = Input(
@@ -60,6 +52,17 @@ class Predictor(BasePredictor):
         class_prompt: str = Input(
             description="The prompt to specify images in the same class as provided instance images.",
             default=None,
+        ),
+        instance_data: Path = Input(
+            description="A ZIP file containing the training data of instance images",
+        ),
+        class_data: Path = Input(
+            description="A ZIP file containing the training data of class images. Images will be generated if you do not provide.",
+            default=None,
+        ),
+        new_class_data: bool = Input(
+            description="Only relevant if you have not provided class_data. Set to True if you are using different class_prompt so that a new set of images will be generated",
+            default=True,
         ),
         save_sample_prompt: str = Input(
             description="The prompt used to generate sample outputs to save.",
@@ -96,7 +99,7 @@ class Predictor(BasePredictor):
         num_class_images: int = Input(
             description="Minimal class images for prior preservation loss. If not have enough images, additional images will be"
             " sampled with class_prompt.",
-            default=200,
+            default=100,
         ),
         seed: int = Input(description="A seed for reproducible training", default=1337),
         resolution: int = Input(
@@ -110,7 +113,7 @@ class Predictor(BasePredictor):
         ),
         train_text_encoder: bool = Input(
             description="Whether to train the text encoder",
-            default=False,
+            default=True,
         ),
         train_batch_size: int = Input(
             description="Batch size (per device) for the training dataloader.",
@@ -123,11 +126,11 @@ class Predictor(BasePredictor):
         num_train_epochs: int = Input(default=1),
         max_train_steps: int = Input(
             description="Total number of training steps to perform.  If provided, overrides num_train_epochs.",
-            default=200,
+            default=None,
         ),
         gradient_accumulation_steps: int = Input(
             description="Number of updates steps to accumulate before performing a backward/update pass.",
-            default=2,
+            default=1,
         ),
         gradient_checkpointing: bool = Input(
             description="Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.",
@@ -135,7 +138,7 @@ class Predictor(BasePredictor):
         ),
         learning_rate: float = Input(
             description="Initial learning rate (after the potential warmup period) to use.",
-            default=5e-6,
+            default=1e-6,
         ),
         scale_lr: bool = Input(
             description="Scale the learning rate by the number of GPUs, gradient accumulation steps, and batch size.",
@@ -192,10 +195,15 @@ class Predictor(BasePredictor):
         cog_instance_data = "cog_instance_data"
         cog_class_data = "cog_class_data"
         cog_output_dir = "cog_out"
-        for path in [cog_instance_data, cog_output_dir, cog_class_data]:
+        for path in [cog_instance_data, cog_output_dir]:
             if os.path.exists(path):
                 shutil.rmtree(path)
             os.makedirs(path)
+
+        if os.path.exists(cog_class_data):
+            if new_class_data:
+                shutil.rmtree(cog_class_data)
+        os.makedirs(cog_class_data)
 
         with ZipFile(str(instance_data), "r") as zip_ref:
             zip_ref.extractall(cog_instance_data)
@@ -211,7 +219,7 @@ class Predictor(BasePredictor):
             "pretrained_model_name_or_path": pretrained_model,
             "huggingface_token": huggingface_token,
             "pretrained_vae_name_or_path": pretrained_vae,
-            "revision": revision,
+            "revision": None if revision == "None" else revision,
             "tokenizer_name": tokenizer_name,
             "instance_data_dir": cog_instance_data,
             "class_data_dir": cog_class_data,
@@ -262,27 +270,14 @@ class Predictor(BasePredictor):
 
         args = Namespace(**args)
 
-        main(args)   
+        main(args)
 
-        out_path =  "output.zip"
+        out_path = "output.zip"
 
-        # directory = Path(cog_output_dir)
-        directory = Path("stable-diffusion-v1-5-cache")
+        directory = Path(cog_output_dir)
         with ZipFile(out_path, "w") as zip:
             for file_path in directory.rglob("*"):
                 print(file_path)
                 zip.write(file_path, arcname=file_path.relative_to(directory))
 
-        # run_cmd(f"zip -r {out_path} {cog_output_dir}")
-
-        # shutil.make_archive(out_path, 'zip', base_dir=cog_output_dir)
-
         return Path(out_path)
-
-
-def run_cmd(command):
-    try:
-        call(command, shell=True)
-    except KeyboardInterrupt:
-        print("Process interrupted")
-        sys.exit(1)

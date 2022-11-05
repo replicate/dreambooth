@@ -1,16 +1,16 @@
 build:
   gpu: true
-  cuda: "11.6.2"
-  python_version: "3.10"
+  cuda: "11.3"
+  python_version: "3.7"
   python_packages:
-    - "ipython==8.6.0"
-    - "diffusers==0.7.0"
-    - "torch==1.13.0 --extra-index-url=https://download.pytorch.org/whl/cu116"
-    - "torchvision==0.14.0 --extra-index-url=https://download.pytorch.org/whl/cu116"
     - "ftfy==6.1.1"
-    - "scipy==1.9.0"
+    - "scipy==1.7.3"
     - "transformers==4.24.0"
     - "accelerate==0.12.0"
     - "bitsandbytes==0.35.4"
+  run:
+   - pip install torch==1.12.1+cu113 torchvision==0.13.1+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html
+   - pip install -qq git+https://github.com/ShivamShrirao/diffusers
+   - pip install -q https://github.com/metrolobo/xformers_wheels/releases/download/1d31a3ac_various_6/xformers-0.0.14.dev0-cp37-cp37m-linux_x86_64.whl
 
 predict: "predictor.py:Predictor"

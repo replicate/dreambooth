@@ -50,7 +50,7 @@ def parse_args(input_args=None):
     parser.add_argument(
         "--revision",
         type=str,
-        default="fp16",
+        default=None,
         required=False,
         help="Revision of pretrained model identifier from huggingface.co/models.",
     )
@@ -396,6 +396,7 @@ def get_full_repo_name(model_id: str, organization: Optional[str] = None, token:
     else:
         return f"{organization}/{model_id}"
 
+
 def main(args):
     logging_dir = Path(args.output_dir, "0", args.logging_dir)
 
@@ -403,7 +404,7 @@ def main(args):
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         mixed_precision=args.mixed_precision,
         log_with="tensorboard",
-        # logging_dir=logging_dir,
+        logging_dir=logging_dir,
     )
 
     # Currently, it's not possible to do gradient accumulation when training two models with accelerate.accumulate
@@ -439,8 +440,6 @@ def main(args):
             cur_class_images = len(list(class_images_dir.iterdir()))
 
             if cur_class_images < args.num_class_images:
-                logger.info(f"Generating class images...")
-
                 torch_dtype = torch.float16 if accelerator.device.type == "cuda" else torch.float32
                 if pipeline is None:
                     pipeline = StableDiffusionPipeline.from_pretrained(
@@ -454,7 +453,7 @@ def main(args):
                         safety_checker=None,
                         revision=args.revision
                     )
-                    pipeline.set_progress_bar_config(disable=False)
+                    pipeline.set_progress_bar_config(disable=True)
                     pipeline.to(accelerator.device)
 
                 num_new_images = args.num_class_images - cur_class_images
