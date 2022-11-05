@@ -26,8 +26,12 @@ jobs:
           REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
         run: |
           python train.py
-      - name: Push to Replicate
+      - name: Log in to Replicate
         env:
           REPLICATE_CLI_TOKEN: ${{ secrets.REPLICATE_CLI_TOKEN }}
         run: |
-          echo "Time to cog push!"
+          echo $REPLICATE_CLI_TOKEN | cog login --token-stdin
+      - name: Push to Replicate
+        run: |
+          echo "TODO"
+          # cog push
