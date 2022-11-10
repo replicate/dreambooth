@@ -47,11 +47,9 @@ class Predictor(BasePredictor):
         # ),
         instance_prompt: str = Input(
             description="The prompt with identifier specifying the instance",
-            default=None,
         ),
         class_prompt: str = Input(
             description="The prompt to specify images in the same class as provided instance images.",
-            default=None,
         ),
         instance_data: Path = Input(
             description="A ZIP file containing the training data of instance images",
@@ -95,7 +93,7 @@ class Predictor(BasePredictor):
         num_class_images: int = Input(
             description="Minimal class images for prior preservation loss. If not have enough images, additional images will be"
             " sampled with class_prompt.",
-            default=100,
+            default=50,
         ),
         seed: int = Input(description="A seed for reproducible training", default=1337),
         resolution: int = Input(
@@ -122,7 +120,7 @@ class Predictor(BasePredictor):
         num_train_epochs: int = Input(default=1),
         max_train_steps: int = Input(
             description="Total number of training steps to perform.  If provided, overrides num_train_epochs.",
-            default=None,
+            default=500,
         ),
         gradient_accumulation_steps: int = Input(
             description="Number of updates steps to accumulate before performing a backward/update pass.",
@@ -199,13 +197,10 @@ class Predictor(BasePredictor):
 
         with ZipFile(str(instance_data), "r") as zip_ref:
             zip_ref.extractall(cog_instance_data)
-            if os.path.exists(os.path.join(cog_instance_data, "__MACOSX")):
-                shutil.rmtree(os.path.join(cog_instance_data, "__MACOSX"))
+
         if class_data is not None:
             with ZipFile(str(class_data), "r") as zip_ref:
                 zip_ref.extractall(cog_class_data)
-            if os.path.exists(os.path.join(cog_class_data, "__MACOSX")):
-                shutil.rmtree(os.path.join(cog_class_data, "__MACOSX"))
 
         # some settings are fixed for the demo
         args = {
@@ -213,8 +208,8 @@ class Predictor(BasePredictor):
             "pretrained_vae_name_or_path": "stabilityai/sd-vae-ft-mse",
             "revision": "fp16",
             "tokenizer_name": None,
-            "instance_data_dir": cog_instance_data,
-            "class_data_dir": cog_class_data,
+            "instance_data_dir": f"{cog_instance_data}/data",
+            "class_data_dir": f"{cog_class_data}/class_data",
             "instance_prompt": instance_prompt,
             "class_prompt": class_prompt,
             "save_sample_prompt": save_sample_prompt,
