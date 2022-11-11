@@ -281,7 +281,8 @@ class DreamBoothDataset(Dataset):
         size=512,
         center_crop=False,
         num_class_images=None,
-        pad_tokens=False
+        pad_tokens=False,
+        hflip=False
     ):
         self.size = size
         self.center_crop = center_crop
@@ -307,6 +308,7 @@ class DreamBoothDataset(Dataset):
 
         self.image_transforms = transforms.Compose(
             [
+                transforms.RandomHorizontalFlip(0.5 * hflip),
                 transforms.Resize(size, interpolation=transforms.InterpolationMode.BILINEAR),
                 transforms.CenterCrop(size) if center_crop else transforms.RandomCrop(size),
                 transforms.ToTensor(),
@@ -443,8 +445,7 @@ def main(args):
             cur_class_images = len(list(class_images_dir.iterdir()))
 
             if cur_class_images < args.num_class_images:
-                # torch_dtype = torch.float16 if accelerator.device.type == "cuda" else torch.float32
-                torch_dtype = torch.float16
+                torch_dtype = torch.float16 if accelerator.device.type == "cuda" else torch.float32
                 if pipeline is None:
                     pipeline = StableDiffusionPipeline.from_pretrained(
                         args.pretrained_model_name_or_path,
@@ -454,6 +455,7 @@ def main(args):
                             revision=None if args.pretrained_vae_name_or_path else args.revision,
                             cache_dir=vae_cache_dir,
                             local_files_only=True,
+                            torch_dtype=torch_dtype
                         ),
                         torch_dtype=torch_dtype,
                         safety_checker=None,
@@ -521,6 +523,7 @@ def main(args):
         args.pretrained_model_name_or_path,
         subfolder="unet",
         revision=args.revision,
+        torch_dtype=torch.float32,
         cache_dir=cache_dir,
         local_files_only=True,
     )
@@ -563,12 +566,7 @@ def main(args):
         eps=args.adam_epsilon,
     )
 
-    noise_scheduler = DDPMScheduler.from_config(
-        args.pretrained_model_name_or_path, 
-        subfolder="scheduler",        
-        cache_dir=cache_dir,
-        local_files_only=True
-    )
+    noise_scheduler = DDPMScheduler.from_config(args.pretrained_model_name_or_path, subfolder="scheduler",  cache_dir=cache_dir, local_files_only=True,)
 
     train_dataset = DreamBoothDataset(
         concepts_list=args.concepts_list,
@@ -577,7 +575,8 @@ def main(args):
         size=args.resolution,
         center_crop=args.center_crop,
         num_class_images=args.num_class_images,
-        pad_tokens=args.pad_tokens
+        pad_tokens=args.pad_tokens,
+        hflip=args.hflip
     )
 
     def collate_fn(examples):
@@ -593,7 +592,11 @@ def main(args):
         pixel_values = torch.stack(pixel_values)
         pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
 
-        input_ids = tokenizer.pad({"input_ids": input_ids}, padding=True, return_tensors="pt").input_ids
+        input_ids = tokenizer.pad(
+            {"input_ids": input_ids},
+            padding=True,
+            return_tensors="pt",
+        ).input_ids
 
         batch = {
             "input_ids": input_ids,
@@ -692,17 +695,12 @@ def main(args):
             if args.train_text_encoder:
                 text_enc_model = accelerator.unwrap_model(text_encoder)
             else:
-                text_enc_model = CLIPTextModel.from_pretrained(
-                    args.pretrained_model_name_or_path, 
-                    subfolder="text_encoder", 
-                    revision=args.revision, 
-                    cache_dir=cache_dir,
-                    local_files_only=True,)
+                text_enc_model = CLIPTextModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision, cache_dir=cache_dir, local_files_only=True)
             scheduler = DDIMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", clip_sample=False, set_alpha_to_one=False)
             pipeline = StableDiffusionPipeline.from_pretrained(
                 args.pretrained_model_name_or_path,
-                unet=accelerator.unwrap_model(unet),
-                text_encoder=text_enc_model,
+                unet=accelerator.unwrap_model(unet).to(torch.float16),
+                text_encoder=text_enc_model.to(torch.float16),
                 vae=AutoencoderKL.from_pretrained(
                     args.pretrained_vae_name_or_path or args.pretrained_model_name_or_path,
                     subfolder=None if args.pretrained_vae_name_or_path else "vae",
@@ -742,6 +740,8 @@ def main(args):
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
             print(f"[*] Weights saved at {save_dir}")
+            unet.to(torch.float32)
+            text_enc_model.to(torch.float32)
 
     # Only show the progress bar once on each machine.
     progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
