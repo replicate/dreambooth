@@ -1,4 +1,5 @@
 import os
+import gc
 import shutil
 import tempfile
 from zipfile import ZipFile
@@ -128,7 +129,7 @@ class Predictor(BasePredictor):
         ),
         gradient_checkpointing: bool = Input(
             description="Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.",
-            default=True,
+            default=False,
         ),
         learning_rate: float = Input(
             description="Initial learning rate (after the potential warmup period) to use.",
@@ -156,7 +157,7 @@ class Predictor(BasePredictor):
         ),
         use_8bit_adam: bool = Input(
             description="Whether or not to use 8-bit Adam from bitsandbytes.",
-            default=True,
+            default=False,
         ),
         adam_beta1: float = Input(
             default=0.9,
@@ -253,6 +254,7 @@ class Predictor(BasePredictor):
             "concepts_list": None,
             "logging_dir": "logs",
             "log_interval": 10,
+            "hflip": False
         }
 
         args = Namespace(**args)
@@ -266,5 +268,8 @@ class Predictor(BasePredictor):
             for file_path in directory.rglob("*"):
                 print(file_path)
                 zip.write(file_path, arcname=file_path.relative_to(directory))
+
+        torch.cuda.empty_cache()
+        gc.collect() 
 
         return Path(out_path)
