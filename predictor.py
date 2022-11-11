@@ -5,11 +5,19 @@ import tempfile
 from zipfile import ZipFile
 from subprocess import call
 from argparse import Namespace
-from cog import BasePredictor, Input, Path
-# from huggingface_hub.hf_api import HfFolder
 import torch
 
+from cog import BasePredictor, Input, Path
+
 from dreambooth import main
+
+
+def run_cmd(command):
+    try:
+        call(command, shell=True)
+    except KeyboardInterrupt:
+        print("Process interrupted")
+        sys.exit(1)
 
 
 class Predictor(BasePredictor):
@@ -184,9 +192,6 @@ class Predictor(BasePredictor):
             description="Save weights every N steps.",
         ),
     ) -> Path:
-    
-        # if huggingface_token:
-        #     HfFolder.save_token(huggingface_token)
 
         cog_instance_data = "cog_instance_data"
         cog_class_data = "cog_class_data"
@@ -203,7 +208,7 @@ class Predictor(BasePredictor):
             with ZipFile(str(class_data), "r") as zip_ref:
                 zip_ref.extractall(cog_class_data)
 
-        # some settings are fixed for the demo
+        # some settings are fixed for the replicate model
         args = {
             "pretrained_model_name_or_path": "runwayml/stable-diffusion-v1-5",
             "pretrained_vae_name_or_path": "stabilityai/sd-vae-ft-mse",
@@ -254,12 +259,16 @@ class Predictor(BasePredictor):
             "concepts_list": None,
             "logging_dir": "logs",
             "log_interval": 10,
-            "hflip": False
+            "hflip": False,
         }
 
         args = Namespace(**args)
 
         main(args)
+
+        gc.collect()
+        torch.cuda.empty_cache()
+        call("nvidia-smi")
 
         out_path = "output.zip"
 
@@ -268,8 +277,5 @@ class Predictor(BasePredictor):
             for file_path in directory.rglob("*"):
                 print(file_path)
                 zip.write(file_path, arcname=file_path.relative_to(directory))
-
-        torch.cuda.empty_cache()
-        gc.collect() 
 
         return Path(out_path)
