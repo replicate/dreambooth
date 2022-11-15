@@ -44,7 +44,7 @@ text_encoder = CLIPTextModel.from_pretrained(
 vae = AutoencoderKL.from_pretrained(
     "runwayml/stable-diffusion-v1-5",
     subfolder="vae",
-    cache_dir=cache_dir,
+    cache_dir=vae_cache_dir,
     revision="fp16",
     use_auth_token=token,
 )
