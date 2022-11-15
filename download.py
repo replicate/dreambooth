@@ -50,10 +50,9 @@ vae = AutoencoderKL.from_pretrained(
 )
 pretrained_vae = AutoencoderKL.from_pretrained(
     "stabilityai/sd-vae-ft-mse",
-    subfolder="vae",
+    subfolder=None,
     cache_dir=vae_cache_dir,
-    revision="fp16",
-    use_auth_token=token,
+    revision=None
 )
 unet = UNet2DConditionModel.from_pretrained(
     "runwayml/stable-diffusion-v1-5",
