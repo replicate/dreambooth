@@ -201,8 +201,13 @@ class Predictor(BasePredictor):
                 shutil.rmtree(path)
             os.makedirs(path)
 
+        # extract zip contents, flattening any paths present within it
         with ZipFile(str(instance_data), "r") as zip_ref:
-            zip_ref.extractall(cog_instance_data)
+            for zip_info in zip_ref.infolist():
+                if zip_info.filename[-1] == '/':
+                    continue
+                zip_info.filename = os.path.basename(zip_info.filename)
+                zip_ref.extract(zip_info, cog_instance_data)
 
         if class_data is not None:
             with ZipFile(str(class_data), "r") as zip_ref:
@@ -214,7 +219,7 @@ class Predictor(BasePredictor):
             "pretrained_vae_name_or_path": "stabilityai/sd-vae-ft-mse",
             "revision": "fp16",
             "tokenizer_name": None,
-            "instance_data_dir": f"{cog_instance_data}/data",
+            "instance_data_dir": f"{cog_instance_data}",
             "class_data_dir": f"{cog_class_data}/class_data",
             "instance_prompt": instance_prompt,
             "class_prompt": class_prompt,
