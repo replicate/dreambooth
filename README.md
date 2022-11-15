@@ -13,3 +13,6 @@ This repository is a copy of the [canonical DreamBooth code](https://github.com/
 This model takes your training images as input, and outputs trained weights that can be used to publish your own custom variant of Stable Diffusion.
 
 To get started training and publishing your own custom model, see [github.com/replicate/dreambooth-template](https://github.com/replicate/dreambooth-template)
+
+### NOTE:
+The default stable diffusion model used is `runwayml/stable-diffusion-v1-5` (fp16), and `stabilityai/sd-vae-ft-mse` as `pretrained_vae`, . If you like to work with the flow locally, run `download.py` first to prepare the weight files that is later used for training.
