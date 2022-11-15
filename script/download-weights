@@ -1,4 +1,8 @@
+#!/usr/bin/env python
+
+
 import os
+import sys
 import torch
 from diffusers import StableDiffusionPipeline
 from diffusers import (
@@ -11,7 +15,6 @@ from diffusers import (
 
 from transformers import CLIPTextModel, CLIPTokenizer
 
-token = "***"
 
 cache_dir = "stable-diffusion-v1-5-cache"
 vae_cache_dir = "sd-vae-ft-mse-cache"
@@ -23,7 +26,7 @@ pipe = StableDiffusionPipeline.from_pretrained(
     cache_dir=cache_dir,
     revision="fp16",
     torch_dtype=torch.float16,
-    use_auth_token=token,
+    use_auth_token=sys.argv[1],
 )
 
 tokenizer = CLIPTokenizer.from_pretrained(
@@ -31,7 +34,7 @@ tokenizer = CLIPTokenizer.from_pretrained(
     subfolder="tokenizer",
     cache_dir=cache_dir,
     revision="fp16",
-    use_auth_token=token,
+    use_auth_token=sys.argv[1],
 )
 
 text_encoder = CLIPTextModel.from_pretrained(
@@ -39,14 +42,14 @@ text_encoder = CLIPTextModel.from_pretrained(
     subfolder="text_encoder",
     cache_dir=cache_dir,
     revision="fp16",
-    use_auth_token=token,
+    use_auth_token=sys.argv[1],
 )
 vae = AutoencoderKL.from_pretrained(
     "runwayml/stable-diffusion-v1-5",
     subfolder="vae",
     cache_dir=cache_dir,
     revision="fp16",
-    use_auth_token=token,
+    use_auth_token=sys.argv[1],
 )
 pretrained_vae = AutoencoderKL.from_pretrained(
     "stabilityai/sd-vae-ft-mse",
@@ -59,12 +62,12 @@ unet = UNet2DConditionModel.from_pretrained(
     subfolder="unet",
     cache_dir=cache_dir,
     revision="fp16",
-    use_auth_token=token,
+    use_auth_token=sys.argv[1],
 )
 
 noise_scheduler = DDPMScheduler.from_config(
     "runwayml/stable-diffusion-v1-5",
     subfolder="scheduler",
     cache_dir=cache_dir,
-    use_auth_token=token,
+    use_auth_token=sys.argv[1],
 )

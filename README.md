@@ -8,11 +8,22 @@ From Wikipedia:
 
 This repository is a copy of the [canonical DreamBooth code](https://github.com/ShivamShrirao/diffusers/tree/main/examples/dreambooth), modified to work with [Cog](https://replicate.com/replicate/cog).
 
+ [![Replicate](https://replicate.com/replicate/dreambooth/badge)](https://replicate.com/replicate/dreambooth)
+
 ## Usage
 
 This model takes your training images as input, and outputs trained weights that can be used to publish your own custom variant of Stable Diffusion.
 
 To get started training and publishing your own custom model, see [github.com/replicate/dreambooth-template](https://github.com/replicate/dreambooth-template)
 
-### NOTE:
-The default stable diffusion model used is `runwayml/stable-diffusion-v1-5` (fp16), and `stabilityai/sd-vae-ft-mse` as `pretrained_vae`, . If you like to work with the flow locally, run `download.py` first to prepare the weight files that is later used for training.
+The default stable diffusion model used is `runwayml/stable-diffusion-v1-5` (fp16), and `stabilityai/sd-vae-ft-mse` as `pretrained_vae`. 
+
+## Run locally with Cog
+
+First, download the pre-trained weights [with your Hugging Face auth token](https://huggingface.co/settings/tokens):
+
+    cog run script/download-weights <your-hugging-face-auth-token>
+
+Then, you can run train your dreambooth:
+
+    cog predict -i instance_prompt="" -i class_prompt="" -i instance_data=@data.zip
