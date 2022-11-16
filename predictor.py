@@ -188,15 +188,15 @@ class Predictor(BasePredictor):
             default=1.0,
             description="Max gradient norm.",
         ),
-        save_interval: int = Input(
-            default=10000,
-            description="Save weights every N steps.",
-        ),
+        # save_interval: int = Input(
+        #     default=10000,
+        #     description="Save weights every N steps.",
+        # ),
     ) -> Path:
 
         cog_instance_data = "cog_instance_data"
         cog_class_data = "cog_class_data"
-        cog_output_dir = "cog_out"
+        cog_output_dir = "checkpoints"
         for path in [cog_instance_data, cog_output_dir, cog_class_data]:
             if os.path.exists(path):
                 shutil.rmtree(path)
@@ -258,7 +258,7 @@ class Predictor(BasePredictor):
             "push_to_hub": False,
             "hub_token": None,
             "hub_model_id": None,
-            "save_interval": save_interval,
+            "save_interval": 10000, # not used
             "save_min_steps": 0,
             "mixed_precision": "fp16",
             "not_cache_latents": False,
