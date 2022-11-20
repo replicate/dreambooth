@@ -207,6 +207,8 @@ class Predictor(BasePredictor):
             for zip_info in zip_ref.infolist():
                 if zip_info.filename[-1] == '/':
                     continue
+                if os.path.basename(zip_info.filename).startswith('.'):
+                    continue
                 mt = mimetypes.guess_type(zip_info.filename)
                 if mt and mt[0] and mt[0].startswith('image/'):
                     zip_info.filename = os.path.basename(zip_info.filename)
