@@ -68,6 +68,11 @@ class Predictor(BasePredictor):
             description="A ZIP file containing the training data of class images. Images will be generated if you do not provide.",
             default=None,
         ),
+        num_class_images: int = Input(
+            description="Minimal class images for prior preservation loss. If not enough images are provided in class_data, additional images will be"
+            " sampled with class_prompt.",
+            default=50,
+        ),
         save_sample_prompt: str = Input(
             description="The prompt used to generate sample outputs to save.",
             default=None,
@@ -99,11 +104,6 @@ class Predictor(BasePredictor):
         prior_loss_weight: float = Input(
             description="Weight of prior preservation loss.",
             default=1.0,
-        ),
-        num_class_images: int = Input(
-            description="Minimal class images for prior preservation loss. If not have enough images, additional images will be"
-            " sampled with class_prompt.",
-            default=50,
         ),
         seed: int = Input(description="A seed for reproducible training", default=1337),
         resolution: int = Input(
@@ -205,18 +205,26 @@ class Predictor(BasePredictor):
         # extract zip contents, flattening any paths present within it
         with ZipFile(str(instance_data), "r") as zip_ref:
             for zip_info in zip_ref.infolist():
-                if zip_info.filename[-1] == '/':
-                    continue
-                if os.path.basename(zip_info.filename).startswith('.'):
+                if zip_info.filename[-1] == "/" or zip_info.filename.startswith(
+                    "__MACOSX"
+                ):
                     continue
                 mt = mimetypes.guess_type(zip_info.filename)
-                if mt and mt[0] and mt[0].startswith('image/'):
+                if mt and mt[0] and mt[0].startswith("image/"):
                     zip_info.filename = os.path.basename(zip_info.filename)
                     zip_ref.extract(zip_info, cog_instance_data)
 
         if class_data is not None:
             with ZipFile(str(class_data), "r") as zip_ref:
-                zip_ref.extractall(cog_class_data)
+                for zip_info in zip_ref.infolist():
+                    if zip_info.filename[-1] == "/" or zip_info.filename.startswith(
+                        "__MACOSX"
+                    ):
+                        continue
+                    mt = mimetypes.guess_type(zip_info.filename)
+                    if mt and mt[0] and mt[0].startswith("image/"):
+                        zip_info.filename = os.path.basename(zip_info.filename)
+                        zip_ref.extract(zip_info, cog_class_data)
 
         # some settings are fixed for the replicate model
         args = {
@@ -224,8 +232,8 @@ class Predictor(BasePredictor):
             "pretrained_vae_name_or_path": "stabilityai/sd-vae-ft-mse",
             "revision": "fp16",
             "tokenizer_name": None,
-            "instance_data_dir": f"{cog_instance_data}",
-            "class_data_dir": f"{cog_class_data}/class_data",
+            "instance_data_dir": cog_instance_data,
+            "class_data_dir": cog_class_data,
             "instance_prompt": instance_prompt,
             "class_prompt": class_prompt,
             "save_sample_prompt": save_sample_prompt,
@@ -260,7 +268,7 @@ class Predictor(BasePredictor):
             "push_to_hub": False,
             "hub_token": None,
             "hub_model_id": None,
-            "save_interval": 10000, # not used
+            "save_interval": 10000,  # not used
             "save_min_steps": 0,
             "mixed_precision": "fp16",
             "not_cache_latents": False,
