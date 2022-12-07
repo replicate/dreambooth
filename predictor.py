@@ -6,6 +6,7 @@ import tempfile
 from zipfile import ZipFile
 from subprocess import call
 from argparse import Namespace
+import time
 import torch
 
 from cog import BasePredictor, Input, Path
@@ -23,7 +24,8 @@ def run_cmd(command):
 
 class Predictor(BasePredictor):
     def setup(self):
-        pass
+        # HACK: wait a little bit for instance to be ready
+        time.sleep(10)
 
     def predict(
         self,
