@@ -4,7 +4,7 @@ import mimetypes
 import shutil
 import tempfile
 from zipfile import ZipFile
-from subprocess import call
+from subprocess import call, check_call
 from argparse import Namespace
 import time
 import torch
@@ -26,6 +26,8 @@ class Predictor(BasePredictor):
     def setup(self):
         # HACK: wait a little bit for instance to be ready
         time.sleep(10)
+        check_call("nvidia-smi", shell=True)
+        assert torch.cuda.is_available()
 
     def predict(
         self,
