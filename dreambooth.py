@@ -48,7 +48,7 @@ torch.backends.cudnn.benchmark = True
 
 logger = get_logger(__name__)
 
-cache_dir = "stable-diffusion-v1-5-cache"
+cache_dir = "stable-diffusion-cache"
 vae_cache_dir = "sd-vae-ft-mse-cache"
 
 
@@ -493,7 +493,6 @@ class AverageMeter:
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
-
 
 
 def main(args):

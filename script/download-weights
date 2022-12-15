@@ -16,13 +16,13 @@ from diffusers import (
 from transformers import CLIPTextModel, CLIPTokenizer
 
 
-cache_dir = "stable-diffusion-v1-5-cache"
+cache_dir = "stable-diffusion-cache"
 vae_cache_dir = "sd-vae-ft-mse-cache"
 os.makedirs(cache_dir, exist_ok=True)
 os.makedirs(vae_cache_dir, exist_ok=True)
 
 pipe = StableDiffusionPipeline.from_pretrained(
-    "runwayml/stable-diffusion-v1-5",
+    "stabilityai/stable-diffusion-2-1-base",
     cache_dir=cache_dir,
     revision="fp16",
     torch_dtype=torch.float16,
@@ -30,7 +30,7 @@ pipe = StableDiffusionPipeline.from_pretrained(
 )
 
 tokenizer = CLIPTokenizer.from_pretrained(
-    "runwayml/stable-diffusion-v1-5",
+    "stabilityai/stable-diffusion-2-1-base",
     subfolder="tokenizer",
     cache_dir=cache_dir,
     revision="fp16",
@@ -38,27 +38,24 @@ tokenizer = CLIPTokenizer.from_pretrained(
 )
 
 text_encoder = CLIPTextModel.from_pretrained(
-    "runwayml/stable-diffusion-v1-5",
+    "stabilityai/stable-diffusion-2-1-base",
     subfolder="text_encoder",
     cache_dir=cache_dir,
     revision="fp16",
     use_auth_token=sys.argv[1],
 )
 vae = AutoencoderKL.from_pretrained(
-    "runwayml/stable-diffusion-v1-5",
+    "stabilityai/stable-diffusion-2-1-base",
     subfolder="vae",
     cache_dir=cache_dir,
     revision="fp16",
     use_auth_token=sys.argv[1],
 )
 pretrained_vae = AutoencoderKL.from_pretrained(
-    "stabilityai/sd-vae-ft-mse",
-    subfolder=None,
-    cache_dir=vae_cache_dir,
-    revision=None
+    "stabilityai/sd-vae-ft-mse", subfolder=None, cache_dir=vae_cache_dir, revision=None
 )
 unet = UNet2DConditionModel.from_pretrained(
-    "runwayml/stable-diffusion-v1-5",
+    "stabilityai/stable-diffusion-2-1-base",
     subfolder="unet",
     cache_dir=cache_dir,
     revision="fp16",
@@ -66,7 +63,7 @@ unet = UNet2DConditionModel.from_pretrained(
 )
 
 noise_scheduler = DDPMScheduler.from_config(
-    "runwayml/stable-diffusion-v1-5",
+    "stabilityai/stable-diffusion-2-1-base",
     subfolder="scheduler",
     cache_dir=cache_dir,
     use_auth_token=sys.argv[1],
