@@ -31,10 +31,14 @@ class Predictor(BasePredictor):
 
     def predict(
         self,
-        # pretrained_model: str = Input(
-        #     description="Model identifier from huggingface.co/models",
-        #     default="runwayml/stable-diffusion-v1-5",
-        # ),
+        pretrained_model: str = Input(
+            description="Model identifier from huggingface.co/models",
+            default="stabilityai/stable-diffusion-2-1-base",
+            choices=[
+                "stabilityai/stable-diffusion-2-1-base",
+                "stabilityai/stable-diffusion-2-1",
+            ],
+        ),
         # huggingface_token: str = Input(
         #     description="Provide your huggingface token to download the models.",
         #     default=None,
@@ -114,6 +118,7 @@ class Predictor(BasePredictor):
             description="The resolution for input images. All the images in the train/validation dataset will be resized to this"
             " resolution.",
             default=512,
+            choices=[512, 768],
         ),
         center_crop: bool = Input(
             description="Whether to center crop images before resizing to resolution",
@@ -232,7 +237,7 @@ class Predictor(BasePredictor):
 
         # some settings are fixed for the replicate model
         args = {
-            "pretrained_model_name_or_path": "stabilityai/stable-diffusion-2-1-base",
+            "pretrained_model_name_or_path": pretrained_model,
             "pretrained_vae_name_or_path": "stabilityai/sd-vae-ft-mse",
             "revision": "fp16",
             "tokenizer_name": None,
