@@ -19,6 +19,8 @@ def run_cmd(command):
         call(command, shell=True)
     except KeyboardInterrupt:
         print("Process interrupted")
+        import sys
+
         sys.exit(1)
 
 
@@ -192,6 +194,9 @@ class Predictor(BasePredictor):
             default=1.0,
             description="Max gradient norm.",
         ),
+        ckpt_base: Path = Input(
+            description="A ckpt file with existing training base",
+        ),
         # save_interval: int = Input(
         #     default=10000,
         #     description="Save weights every N steps.",
@@ -201,7 +206,13 @@ class Predictor(BasePredictor):
         cog_instance_data = "cog_instance_data"
         cog_class_data = "cog_class_data"
         cog_output_dir = "checkpoints"
-        for path in [cog_instance_data, cog_output_dir, cog_class_data]:
+        cog_custom_base_data = "cog_custom_base_data"
+        for path in [
+            cog_instance_data,
+            cog_output_dir,
+            cog_class_data,
+            cog_custom_base_data,
+        ]:
             if os.path.exists(path):
                 shutil.rmtree(path)
             os.makedirs(path)
@@ -230,9 +241,17 @@ class Predictor(BasePredictor):
                         zip_info.filename = os.path.basename(zip_info.filename)
                         zip_ref.extract(zip_info, cog_class_data)
 
+        pretrained_model_name_or_path = "runwayml/stable-diffusion-v1-5"
+
+        if ckpt_base is not None:
+            run_cmd(
+                f"python convert_original_stable_diffusion_to_diffusers.py --checkpoint_path {ckpt_base} --dump_path {cog_custom_base_data}"
+            )
+            pretrained_model_name_or_path = cog_custom_base_data
+
         # some settings are fixed for the replicate model
         args = {
-            "pretrained_model_name_or_path": "runwayml/stable-diffusion-v1-5",
+            "pretrained_model_name_or_path": pretrained_model_name_or_path,
             "pretrained_vae_name_or_path": "stabilityai/sd-vae-ft-mse",
             "revision": "fp16",
             "tokenizer_name": None,
