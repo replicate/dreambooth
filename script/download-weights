@@ -17,13 +17,7 @@ from transformers import CLIPTextModel, CLIPTokenizer
 
 
 cache_dir = "stable-diffusion-cache"
-vae_cache_dir = "sd-vae-ft-mse-cache"
 os.makedirs(cache_dir, exist_ok=True)
-os.makedirs(vae_cache_dir, exist_ok=True)
-
-pretrained_vae = AutoencoderKL.from_pretrained(
-    "stabilityai/sd-vae-ft-mse", subfolder=None, cache_dir=vae_cache_dir, revision=None
-)
 
 for model in (
     "stabilityai/stable-diffusion-2-1",
@@ -35,7 +29,6 @@ for model in (
         cache_dir=cache_dir,
         revision="fp16",
         torch_dtype=torch.float16,
-        use_auth_token=sys.argv[1],
     )
 
     tokenizer = CLIPTokenizer.from_pretrained(
@@ -43,7 +36,6 @@ for model in (
         subfolder="tokenizer",
         cache_dir=cache_dir,
         revision="fp16",
-        use_auth_token=sys.argv[1],
     )
 
     text_encoder = CLIPTextModel.from_pretrained(
@@ -51,7 +43,6 @@ for model in (
         subfolder="text_encoder",
         cache_dir=cache_dir,
         revision="fp16",
-        use_auth_token=sys.argv[1],
     )
 
     vae = AutoencoderKL.from_pretrained(
@@ -59,7 +50,6 @@ for model in (
         subfolder="vae",
         cache_dir=cache_dir,
         revision="fp16",
-        use_auth_token=sys.argv[1],
     )
 
     unet = UNet2DConditionModel.from_pretrained(
@@ -67,12 +57,10 @@ for model in (
         subfolder="unet",
         cache_dir=cache_dir,
         revision="fp16",
-        use_auth_token=sys.argv[1],
     )
 
     noise_scheduler = DDPMScheduler.from_config(
         model,
         subfolder="scheduler",
         cache_dir=cache_dir,
-        use_auth_token=sys.argv[1],
     )
