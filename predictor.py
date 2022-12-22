@@ -1,4 +1,8 @@
 import os
+
+os.environ["HF_HOME"] = (
+    os.path.dirname(os.path.abspath(__file__)) + "/stable-diffusion-v1-5-cache"
+)
 import gc
 import mimetypes
 import shutil
@@ -33,10 +37,10 @@ class Predictor(BasePredictor):
 
     def predict(
         self,
-        # pretrained_model: str = Input(
-        #     description="Model identifier from huggingface.co/models",
-        #     default="runwayml/stable-diffusion-v1-5",
-        # ),
+        pretrained_model: str = Input(
+            description="Model identifier from huggingface.co/models",
+            default="runwayml/stable-diffusion-v1-5",
+        ),
         # huggingface_token: str = Input(
         #     description="Provide your huggingface token to download the models.",
         #     default=None,
@@ -45,11 +49,10 @@ class Predictor(BasePredictor):
         #     description="Pretrained vae or vae identifier from huggingface.co/models",
         #     default="stabilityai/sd-vae-ft-mse",
         # ),
-        # revision: str = Input(
-        #     description="Revision of pretrained model identifier from huggingface.co/models",
-        #     choices=["fp16", "None"],
-        #     default="fp16",
-        # ),
+        revision: str = Input(
+            description="Revision of pretrained model identifier from huggingface.co/models",
+            default="fp16",
+        ),
         # mixed_precision: str = Input(
         #     description="Whether to use mixed precision. Choose"
         #     "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."
@@ -195,7 +198,7 @@ class Predictor(BasePredictor):
             description="Max gradient norm.",
         ),
         ckpt_base: Path = Input(
-            description="A ckpt file with existing training base",
+            description="A ckpt file with existing training base", default=None
         ),
         # save_interval: int = Input(
         #     default=10000,
@@ -241,7 +244,7 @@ class Predictor(BasePredictor):
                         zip_info.filename = os.path.basename(zip_info.filename)
                         zip_ref.extract(zip_info, cog_class_data)
 
-        pretrained_model_name_or_path = "runwayml/stable-diffusion-v1-5"
+        pretrained_model_name_or_path = pretrained_model
 
         if ckpt_base is not None:
             run_cmd(
@@ -253,7 +256,7 @@ class Predictor(BasePredictor):
         args = {
             "pretrained_model_name_or_path": pretrained_model_name_or_path,
             "pretrained_vae_name_or_path": "stabilityai/sd-vae-ft-mse",
-            "revision": "fp16",
+            "revision": revision,
             "tokenizer_name": None,
             "instance_data_dir": cog_instance_data,
             "class_data_dir": cog_class_data,
