@@ -31,14 +31,14 @@ class Predictor(BasePredictor):
 
     def predict(
         self,
-        pretrained_model: str = Input(
-            description="Model identifier from huggingface.co/models",
-            default="stabilityai/stable-diffusion-2-1-base",
-            choices=[
-                "stabilityai/stable-diffusion-2-1-base",
-                "stabilityai/stable-diffusion-2-1",
-            ],
-        ),
+        # pretrained_model: str = Input(
+        #     description="Model identifier from huggingface.co/models",
+        #     default="stabilityai/stable-diffusion-2-1-base",
+        #     choices=[
+        #         "stabilityai/stable-diffusion-2-1-base",
+        #         "stabilityai/stable-diffusion-2-1",
+        #     ],
+        # ),
         # huggingface_token: str = Input(
         #     description="Provide your huggingface token to download the models.",
         #     default=None,
@@ -114,12 +114,12 @@ class Predictor(BasePredictor):
             default=1.0,
         ),
         seed: int = Input(description="A seed for reproducible training", default=1337),
-        resolution: int = Input(
-            description="The resolution for input images. All the images in the train/validation dataset will be resized to this"
-            " resolution.",
-            default=512,
-            choices=[512, 768],
-        ),
+        # resolution: int = Input(
+        #     description="The resolution for input images. All the images in the train/validation dataset will be resized to this"
+        #     " resolution.",
+        #     default=512,
+        #     choices=[512, 768],
+        # ),
         center_crop: bool = Input(
             description="Whether to center crop images before resizing to resolution",
             default=False,
@@ -202,6 +202,9 @@ class Predictor(BasePredictor):
         #     description="Save weights every N steps.",
         # ),
     ) -> Path:
+
+        pretrained_model = "stabilityai/stable-diffusion-2-1-base"
+        resolution = 512
 
         cog_instance_data = "cog_instance_data"
         cog_class_data = "cog_class_data"

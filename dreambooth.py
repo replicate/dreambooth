@@ -49,7 +49,6 @@ torch.backends.cudnn.benchmark = True
 logger = get_logger(__name__)
 
 cache_dir = "stable-diffusion-cache"
-vae_cache_dir = "sd-vae-ft-mse-cache"
 
 
 # def parse_args(input_args=None):
@@ -550,19 +549,6 @@ def main(args):
                 if pipeline is None:
                     pipeline = StableDiffusionPipeline.from_pretrained(
                         args.pretrained_model_name_or_path,
-                        vae=AutoencoderKL.from_pretrained(
-                            args.pretrained_vae_name_or_path
-                            or args.pretrained_model_name_or_path,
-                            subfolder=None
-                            if args.pretrained_vae_name_or_path
-                            else "vae",
-                            revision=None
-                            if args.pretrained_vae_name_or_path
-                            else args.revision,
-                            cache_dir=vae_cache_dir,
-                            local_files_only=True,
-                            torch_dtype=torch_dtype,
-                        ),
                         torch_dtype=torch_dtype,
                         safety_checker=None,
                         revision=args.revision,
@@ -874,16 +860,6 @@ def main(args):
                 args.pretrained_model_name_or_path,
                 unet=accelerator.unwrap_model(unet).to(torch.float16),
                 text_encoder=text_enc_model.to(torch.float16),
-                vae=AutoencoderKL.from_pretrained(
-                    args.pretrained_vae_name_or_path
-                    or args.pretrained_model_name_or_path,
-                    subfolder=None if args.pretrained_vae_name_or_path else "vae",
-                    revision=None
-                    if args.pretrained_vae_name_or_path
-                    else args.revision,
-                    cache_dir=vae_cache_dir,
-                    local_files_only=True,
-                ),
                 safety_checker=None,
                 scheduler=scheduler,
                 torch_dtype=torch.float16,
