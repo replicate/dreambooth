@@ -380,9 +380,15 @@ class DreamBoothDataset(Dataset):
         self.instance_images_path = []
         self.class_images_path = []
 
+        def extract_concept(fn):
+            return fn.stem.replace("_", " ").split("-")[0]
+
         for concept in concepts_list:
             inst_img_path = [
-                (x, concept["instance_prompt"])
+                (
+                    x,
+                    (concept["instance_prompt"] + " " + extract_concept(x)).strip(),
+                )
                 for x in Path(concept["instance_data_dir"]).iterdir()
                 if x.is_file()
             ]
@@ -396,6 +402,7 @@ class DreamBoothDataset(Dataset):
                 ]
                 self.class_images_path.extend(class_img_path[:num_class_images])
 
+        print(self.instance_images_path)
         random.shuffle(self.instance_images_path)
         self.num_instance_images = len(self.instance_images_path)
         self.num_class_images = len(self.class_images_path)
@@ -493,7 +500,6 @@ class AverageMeter:
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
-
 
 
 def main(args):
