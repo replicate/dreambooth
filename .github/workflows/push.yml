@@ -1,0 +1,34 @@
+name: Push to Replicate
+
+# This workflow is triggered manually from the GitHub website.
+# To run it, click the "Actions" tab on the repo page.
+on:
+  workflow_dispatch:
+    inputs:
+      model_name:
+        type: choice
+        description: Replicate model name
+        options:
+          - replicate/dreambooth
+          - replicate/dreambooth-staging
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Cog
+        run: |
+          sudo curl -o /usr/local/bin/cog -L https://github.com/replicate/cog/releases/latest/download/cog_`uname -s`_`uname -m`
+          sudo chmod +x /usr/local/bin/cog
+
+      - name: Log in to Replicate
+        env:
+          REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
+        run: |
+          echo $REPLICATE_API_TOKEN | cog login --token-stdin
+
+      - name: Push to Replicate
+        run: |
+          cog push r8.im/{{ inputs.model_name }}
