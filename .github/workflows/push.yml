@@ -1,15 +1,19 @@
-name: Release
+name: Push to Replicate
 
-env:
-  model_name: replicate/dreambooth
-
+# This workflow is triggered manually from the GitHub website.
+# To run it, click the "Actions" tab on the repo page.
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      model_name:
+        type: choice
+        description: Replicate model name
+        options:
+          - replicate/dreambooth
+          - replicate/dreambooth-staging
 
 jobs:
-  release:
+  push:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -27,4 +31,4 @@ jobs:
 
       - name: Push to Replicate
         run: |
-          cog push r8.im/${{ env.model_name }}
+          cog push r8.im/{{ inputs.model_name }}
