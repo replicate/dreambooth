@@ -5,6 +5,8 @@ build:
   python_packages:
     - "diffusers==0.10.0"
     - "torch==1.13.0"
+    - "pytorch-lightning==1.8.6"
+    - "tensorboard==2.11.0"
     - "torchvision==0.14.0"
     - "ftfy==6.1.1"
     - "scipy==1.9.3"
