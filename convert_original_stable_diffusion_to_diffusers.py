@@ -861,7 +861,11 @@ if __name__ == "__main__":
     else:
         print("global_step key not found in model")
         global_step = None
-    checkpoint = checkpoint["state_dict"]
+    if 'state_dict' in checkpoint:
+        checkpoint = checkpoint["state_dict"]
+    else:
+        print('WARNING: no state_dict, attempting to continue as bare state_dict')
+        print(checkpoint.keys())
 
     upcast_attention = False
     if args.original_config_file is None:
