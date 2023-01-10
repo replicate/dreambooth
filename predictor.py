@@ -59,6 +59,9 @@ class Predictor(BasePredictor):
         #     description="Pretrained tokenizer name or path if not the same as model_name",
         #     default=None,
         # ),
+        initial_weights: Path = Input(
+            description="A ZIP file containing the initial weights of the model.  The structure of zip should be similar to that produced by replicate dreambooth api",
+        ),
         instance_prompt: str = Input(
             description="The prompt you use to describe your training images, in the format: `a [identifier] [class noun]`, where the `[identifier]` should be a rare token. Relatively short sequences with 1-3 letters work the best (e.g. `sks`, `xjy`). `[class noun]` is a coarse class descriptor of the subject (e.g. cat, dog, watch, etc.). For example, your `instance_prompt` can be: `a sks dog`, or with some extra description `a photo of a sks dog`. The trained model will learn to bind a unique identifier with your specific subject in the `instance_data`.",
         ),
@@ -201,6 +204,7 @@ class Predictor(BasePredictor):
         cog_instance_data = "cog_instance_data"
         cog_class_data = "cog_class_data"
         cog_output_dir = "checkpoints"
+        cog_custom_base_data = "cog_custom_base_data"
         for path in [cog_instance_data, cog_output_dir, cog_class_data]:
             if os.path.exists(path):
                 shutil.rmtree(path)
@@ -230,9 +234,11 @@ class Predictor(BasePredictor):
                         zip_info.filename = os.path.basename(zip_info.filename)
                         zip_ref.extract(zip_info, cog_class_data)
 
+        run_cmd(f"unzip {initial_weights} -d {cog_custom_base_data}")
+
         # some settings are fixed for the replicate model
         args = {
-            "pretrained_model_name_or_path": "runwayml/stable-diffusion-v1-5",
+            "pretrained_model_name_or_path": cog_custom_base_data,
             "pretrained_vae_name_or_path": "stabilityai/sd-vae-ft-mse",
             "revision": "fp16",
             "tokenizer_name": None,
