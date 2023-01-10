@@ -59,6 +59,13 @@ class Predictor(BasePredictor):
         #     description="Pretrained tokenizer name or path if not the same as model_name",
         #     default=None,
         # ),
+        hf_model_name: str = Input(
+            description="Huggingface model name",
+        ),
+        revision: str = Input(
+            description="Revision of pretrained model identifier from huggingface.co/models",
+            default="main",
+        ),
         instance_prompt: str = Input(
             description="The prompt you use to describe your training images, in the format: `a [identifier] [class noun]`, where the `[identifier]` should be a rare token. Relatively short sequences with 1-3 letters work the best (e.g. `sks`, `xjy`). `[class noun]` is a coarse class descriptor of the subject (e.g. cat, dog, watch, etc.). For example, your `instance_prompt` can be: `a sks dog`, or with some extra description `a photo of a sks dog`. The trained model will learn to bind a unique identifier with your specific subject in the `instance_data`.",
         ),
@@ -232,9 +239,9 @@ class Predictor(BasePredictor):
 
         # some settings are fixed for the replicate model
         args = {
-            "pretrained_model_name_or_path": "runwayml/stable-diffusion-v1-5",
+            "pretrained_model_name_or_path": hf_model_name,
             "pretrained_vae_name_or_path": "stabilityai/sd-vae-ft-mse",
-            "revision": "fp16",
+            "revision": revision,
             "tokenizer_name": None,
             "instance_data_dir": cog_instance_data,
             "class_data_dir": cog_class_data,

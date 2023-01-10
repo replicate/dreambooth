@@ -48,7 +48,7 @@ torch.backends.cudnn.benchmark = True
 
 logger = get_logger(__name__)
 
-cache_dir = "stable-diffusion-v1-5-cache"
+cache_dir = "diffusers-cache"
 vae_cache_dir = "sd-vae-ft-mse-cache"
 
 
@@ -495,7 +495,6 @@ class AverageMeter:
         self.avg = self.sum / self.count
 
 
-
 def main(args):
     logging_dir = Path(args.output_dir, "0", args.logging_dir)
 
@@ -561,14 +560,12 @@ def main(args):
                             if args.pretrained_vae_name_or_path
                             else args.revision,
                             cache_dir=vae_cache_dir,
-                            local_files_only=True,
                             torch_dtype=torch_dtype,
                         ),
                         torch_dtype=torch_dtype,
                         safety_checker=None,
                         revision=args.revision,
                         cache_dir=cache_dir,
-                        local_files_only=True,
                     )
                     pipeline.set_progress_bar_config(disable=True)
                     pipeline.to(accelerator.device)
@@ -622,7 +619,6 @@ def main(args):
             subfolder="tokenizer",
             revision=args.revision,
             cache_dir=cache_dir,
-            local_files_only=True,
         )
 
     # Load models and create wrapper for stable diffusion
@@ -631,13 +627,11 @@ def main(args):
         subfolder="text_encoder",
         revision=args.revision,
         cache_dir=cache_dir,
-        local_files_only=True,
     )
     vae = AutoencoderKL.from_pretrained(
         args.pretrained_model_name_or_path,
         subfolder="vae",
         revision=args.revision,
-        cache_dir=cache_dir,
         local_files_only=True,
     )
     unet = UNet2DConditionModel.from_pretrained(
@@ -645,7 +639,6 @@ def main(args):
         subfolder="unet",
         revision=args.revision,
         torch_dtype=torch.float32,
-        cache_dir=cache_dir,
         local_files_only=True,
     )
 
@@ -695,7 +688,6 @@ def main(args):
     noise_scheduler = DDPMScheduler.from_config(
         args.pretrained_model_name_or_path,
         subfolder="scheduler",
-        cache_dir=cache_dir,
         local_files_only=True,
     )
 
@@ -861,7 +853,6 @@ def main(args):
                     args.pretrained_model_name_or_path,
                     subfolder="text_encoder",
                     revision=args.revision,
-                    cache_dir=cache_dir,
                     local_files_only=True,
                 )
             scheduler = DDIMScheduler(
@@ -882,14 +873,12 @@ def main(args):
                     revision=None
                     if args.pretrained_vae_name_or_path
                     else args.revision,
-                    cache_dir=vae_cache_dir,
                     local_files_only=True,
                 ),
                 safety_checker=None,
                 scheduler=scheduler,
                 torch_dtype=torch.float16,
                 revision=args.revision,
-                cache_dir=cache_dir,
                 local_files_only=True,
             )
             # save_dir = os.path.join(args.output_dir, f"{step}")
