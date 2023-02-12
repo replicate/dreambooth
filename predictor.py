@@ -29,36 +29,16 @@ class Predictor(BasePredictor):
         check_call("nvidia-smi", shell=True)
         assert torch.cuda.is_available()
 
+        if os.path.exists("ckpt") and os.path.isdir("ckpt"):
+            for path in os.scandir("ckpt"):
+                self.pretrained_model_name_or_path = f"ckpt/{path.name}"
+        if self.pretrained_model_name_or_path == None:
+            raise Exception(
+                "No pretrained model found in ckpt folder.  Add as a directory"
+            )
+
     def predict(
         self,
-        # pretrained_model: str = Input(
-        #     description="Model identifier from huggingface.co/models",
-        #     default="runwayml/stable-diffusion-v1-5",
-        # ),
-        # huggingface_token: str = Input(
-        #     description="Provide your huggingface token to download the models.",
-        #     default=None,
-        # ),
-        # pretrained_vae: str = Input(
-        #     description="Pretrained vae or vae identifier from huggingface.co/models",
-        #     default="stabilityai/sd-vae-ft-mse",
-        # ),
-        # revision: str = Input(
-        #     description="Revision of pretrained model identifier from huggingface.co/models",
-        #     choices=["fp16", "None"],
-        #     default="fp16",
-        # ),
-        # mixed_precision: str = Input(
-        #     description="Whether to use mixed precision. Choose"
-        #     "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."
-        #     "and an Nvidia Ampere GPU.",
-        #     choices=["fp16", "bf16", "no"],
-        #     default="fp16",
-        # ),
-        # tokenizer_name: str = Input(
-        #     description="Pretrained tokenizer name or path if not the same as model_name",
-        #     default=None,
-        # ),
         instance_prompt: str = Input(
             description="The prompt you use to describe your training images, in the format: `a [identifier] [class noun]`, where the `[identifier]` should be a rare token. Relatively short sequences with 1-3 letters work the best (e.g. `sks`, `xjy`). `[class noun]` is a coarse class descriptor of the subject (e.g. cat, dog, watch, etc.). For example, your `instance_prompt` can be: `a sks dog`, or with some extra description `a photo of a sks dog`. The trained model will learn to bind a unique identifier with your specific subject in the `instance_data`.",
         ),
@@ -75,7 +55,7 @@ class Predictor(BasePredictor):
         num_class_images: int = Input(
             description="Minimal class images for prior preservation loss. If not enough images are provided in class_data, additional images will be"
             " sampled with class_prompt.",
-            default=50,
+            default=None,
         ),
         save_sample_prompt: str = Input(
             description="The prompt used to generate sample outputs to save.",
@@ -192,10 +172,6 @@ class Predictor(BasePredictor):
             default=1.0,
             description="Max gradient norm.",
         ),
-        # save_interval: int = Input(
-        #     default=10000,
-        #     description="Save weights every N steps.",
-        # ),
     ) -> Path:
 
         cog_instance_data = "cog_instance_data"
@@ -218,7 +194,7 @@ class Predictor(BasePredictor):
                     zip_info.filename = os.path.basename(zip_info.filename)
                     zip_ref.extract(zip_info, cog_instance_data)
 
-        if class_data is not None:
+        if class_data is not None and num_class_images is not None:
             with ZipFile(str(class_data), "r") as zip_ref:
                 for zip_info in zip_ref.infolist():
                     if zip_info.filename[-1] == "/" or zip_info.filename.startswith(
@@ -230,10 +206,18 @@ class Predictor(BasePredictor):
                         zip_info.filename = os.path.basename(zip_info.filename)
                         zip_ref.extract(zip_info, cog_class_data)
 
+        else:
+            cog_class_data = "class_data"
+            files = os.listdir(cog_class_data)
+            images = [f for f in files if f.endswith(".jpg") or f.endswith(".png")]
+            num_class_images = len(images)
+
+        print(self.pretrained_model_name_or_path)
+
         # some settings are fixed for the replicate model
         args = {
-            "pretrained_model_name_or_path": "runwayml/stable-diffusion-v1-5",
-            "pretrained_vae_name_or_path": "stabilityai/sd-vae-ft-mse",
+            "pretrained_model_name_or_path": self.pretrained_model_name_or_path,
+            "pretrained_vae_name_or_path": self.pretrained_model_name_or_path + "/vae",
             "revision": "fp16",
             "tokenizer_name": None,
             "instance_data_dir": cog_instance_data,

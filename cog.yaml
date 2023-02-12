@@ -4,6 +4,7 @@ build:
   python_version: "3.10"
   python_packages:
     - "diffusers==0.10.0"
+    - "tensorboard==2.11.2"
     - "torch==1.13.0"
     - "torchvision==0.14.0"
     - "ftfy==6.1.1"
