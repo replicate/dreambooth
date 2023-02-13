@@ -184,8 +184,14 @@ class Predictor(BasePredictor):
     ) -> List[Path]:
         cog_instance_data = "cog_instance_data"
         cog_class_data = "cog_class_data"
+        cog_generated_images = "cog_generated_images"
         cog_output_dir = "checkpoints"
-        for path in [cog_instance_data, cog_output_dir, cog_class_data]:
+        for path in [
+            cog_instance_data,
+            cog_output_dir,
+            cog_class_data,
+            cog_generated_images,
+        ]:
             if os.path.exists(path):
                 shutil.rmtree(path)
             os.makedirs(path)
@@ -233,6 +239,7 @@ class Predictor(BasePredictor):
             "save_guidance_scale": None,
             "save_infer_steps": None,
             "generate_images": generate_images,
+            "generate_images_dir": cog_generated_images,
             "pad_tokens": pad_tokens,
             "with_prior_preservation": with_prior_preservation,
             "prior_loss_weight": prior_loss_weight,
@@ -274,11 +281,26 @@ class Predictor(BasePredictor):
 
         args = Namespace(**args)
 
-        pipe = main(args)
+        main(args)
 
         gc.collect()
         torch.cuda.empty_cache()
         call("nvidia-smi")
 
-        directory = Path(cog_output_dir, "generated_samples")
-        return [Path(fn) for fn in directory.rglob("*")]
+        results = []
+
+        weights_path = "output.zip"
+        directory = Path(cog_output_dir)
+        with ZipFile(weights_path, "w") as zip:
+            for file_path in directory.rglob("*"):
+                print(file_path)
+                zip.write(file_path, arcname=file_path.relative_to(directory))
+
+        results.append(Path(weights_path))
+
+        directory = Path(cog_generated_images)
+        for file_path in directory.rglob("*"):
+            print(file_path)
+            results.append(file_path)
+
+        return results
