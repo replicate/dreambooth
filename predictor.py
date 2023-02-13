@@ -1,9 +1,11 @@
+import json
 import os
 import gc
 import mimetypes
 import shutil
 import tempfile
 from zipfile import ZipFile
+from typing import List
 from subprocess import call, check_call
 from argparse import Namespace
 import time
@@ -77,25 +79,8 @@ class Predictor(BasePredictor):
             " sampled with class_prompt.",
             default=50,
         ),
-        save_sample_prompt: str = Input(
-            description="The prompt used to generate sample outputs to save.",
-            default=None,
-        ),
-        save_sample_negative_prompt: str = Input(
-            description="The negative prompt used to generate sample outputs to save.",
-            default=None,
-        ),
-        n_save_sample: int = Input(
-            description="The number of samples to save.",
-            default=4,
-        ),
-        save_guidance_scale: float = Input(
-            description="CFG for save sample.",
-            default=7.5,
-        ),
-        save_infer_steps: int = Input(
-            description="The number of inference steps for save sample.",
-            default=50,
+        generate_images: str = Input(
+            description='json of samples to generate: [{"name": "sample_name", "inputs": {"prompt": "a sks dog", "num_samples": 4, "save_guidance_scale": 7.5, "save_infer_steps": 50}}]',
         ),
         pad_tokens: bool = Input(
             description="Flag to pad tokens to length 77.",
@@ -196,8 +181,7 @@ class Predictor(BasePredictor):
         #     default=10000,
         #     description="Save weights every N steps.",
         # ),
-    ) -> Path:
-
+    ) -> List[Path]:
         cog_instance_data = "cog_instance_data"
         cog_class_data = "cog_class_data"
         cog_output_dir = "checkpoints"
@@ -230,6 +214,9 @@ class Predictor(BasePredictor):
                         zip_info.filename = os.path.basename(zip_info.filename)
                         zip_ref.extract(zip_info, cog_class_data)
 
+        if generate_images is not None:
+            generate_images = json.loads(generate_images)
+
         # some settings are fixed for the replicate model
         args = {
             "pretrained_model_name_or_path": "runwayml/stable-diffusion-v1-5",
@@ -240,11 +227,12 @@ class Predictor(BasePredictor):
             "class_data_dir": cog_class_data,
             "instance_prompt": instance_prompt,
             "class_prompt": class_prompt,
-            "save_sample_prompt": save_sample_prompt,
-            "save_sample_negative_prompt": save_sample_negative_prompt,
-            "n_save_sample": n_save_sample,
-            "save_guidance_scale": save_guidance_scale,
-            "save_infer_steps": save_infer_steps,
+            "save_sample_prompt": None,
+            "save_sample_negative_prompt": None,
+            "n_save_sample": None,
+            "save_guidance_scale": None,
+            "save_infer_steps": None,
+            "generate_images": generate_images,
             "pad_tokens": pad_tokens,
             "with_prior_preservation": with_prior_preservation,
             "prior_loss_weight": prior_loss_weight,
@@ -286,18 +274,11 @@ class Predictor(BasePredictor):
 
         args = Namespace(**args)
 
-        main(args)
+        pipe = main(args)
 
         gc.collect()
         torch.cuda.empty_cache()
         call("nvidia-smi")
 
-        out_path = "output.zip"
-
-        directory = Path(cog_output_dir)
-        with ZipFile(out_path, "w") as zip:
-            for file_path in directory.rglob("*"):
-                print(file_path)
-                zip.write(file_path, arcname=file_path.relative_to(directory))
-
-        return Path(out_path)
+        directory = Path(cog_output_dir, "generated_samples")
+        return [Path(fn) for fn in directory.rglob("*")]

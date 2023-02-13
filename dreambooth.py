@@ -26,6 +26,12 @@ from diffusers import (
     DDPMScheduler,
     StableDiffusionPipeline,
     UNet2DConditionModel,
+    PNDMScheduler,
+    LMSDiscreteScheduler,
+    DDIMScheduler,
+    EulerDiscreteScheduler,
+    EulerAncestralDiscreteScheduler,
+    DPMSolverMultistepScheduler,
 )
 from diffusers.optimization import get_scheduler
 from huggingface_hub import HfFolder, Repository, whoami
@@ -495,7 +501,6 @@ class AverageMeter:
         self.avg = self.sum / self.count
 
 
-
 def main(args):
     logging_dir = Path(args.output_dir, "0", args.logging_dir)
 
@@ -898,24 +903,53 @@ def main(args):
             with open(os.path.join(save_dir, "args.json"), "w") as f:
                 json.dump(args.__dict__, f, indent=2)
 
-            if args.save_sample_prompt is not None:
+            if args.generate_images is not None:
                 pipeline = pipeline.to(accelerator.device)
                 g_cuda = torch.Generator(device=accelerator.device).manual_seed(
                     args.seed
                 )
                 pipeline.set_progress_bar_config(disable=True)
-                sample_dir = os.path.join(save_dir, "samples")
+                sample_dir = os.path.join(save_dir, "generated_samples")
                 os.makedirs(sample_dir, exist_ok=True)
                 with torch.autocast("cuda"), torch.inference_mode():
-                    for i in tqdm(range(args.n_save_sample), desc="Generating samples"):
-                        images = pipeline(
-                            args.save_sample_prompt,
-                            negative_prompt=args.save_sample_negative_prompt,
-                            guidance_scale=args.save_guidance_scale,
-                            num_inference_steps=args.save_infer_steps,
-                            generator=g_cuda,
-                        ).images
-                        images[0].save(os.path.join(sample_dir, f"{i}.png"))
+                    for info in tqdm(args.generate_images, desc="Generating samples"):
+                        inputs = info["inputs"]
+                        name = info["name"]
+                        prompt = inputs["prompt"]
+                        negative_prompt = inputs.get("negative_prompt")
+                        width = int(inputs.get("width", 512))
+                        height = int(inputs.get("height", 512))
+                        num_outputs = int(inputs.get("num_outputs", 1))
+                        num_inference_steps = int(inputs.get("num_inference_steps", 50))
+                        guidance_scale = float(inputs.get("guidance_scale", 7.5))
+                        scheduler = inputs.get("scheduler", "DDIM")
+                        seed = inputs.get("seed")
+                        if seed is None:
+                            seed = int.from_bytes(os.urandom(2), "big")
+                        else:
+                            seed = int(seed)
+
+                        pipeline.scheduler = make_scheduler(
+                            scheduler, pipeline.scheduler.config
+                        )
+                        generator = torch.Generator("cuda").manual_seed(seed)
+                        output = pipeline(
+                            prompt=[prompt] * num_outputs
+                            if prompt is not None
+                            else None,
+                            negative_prompt=[negative_prompt] * num_outputs
+                            if negative_prompt is not None
+                            else None,
+                            guidance_scale=guidance_scale,
+                            generator=generator,
+                            num_inference_steps=num_inference_steps,
+                            width=width,
+                            height=height,
+                        )
+
+                        for i, image in enumerate(output.images):
+                            image.save(os.path.join(sample_dir, f"{name}-{i}.png"))
+
                 del pipeline
                 # if torch.cuda.is_available():
                 #     torch.cuda.empty_cache()
@@ -1049,3 +1083,14 @@ def main(args):
     save_weights(global_step)
 
     accelerator.end_training()
+
+
+def make_scheduler(name, config):
+    return {
+        "PNDM": PNDMScheduler.from_config(config),
+        "KLMS": LMSDiscreteScheduler.from_config(config),
+        "DDIM": DDIMScheduler.from_config(config),
+        "K_EULER": EulerDiscreteScheduler.from_config(config),
+        "K_EULER_ANCESTRAL": EulerAncestralDiscreteScheduler.from_config(config),
+        "DPMSolverMultistep": DPMSolverMultistepScheduler.from_config(config),
+    }[name]
