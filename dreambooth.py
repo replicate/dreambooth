@@ -890,13 +890,13 @@ def main(args):
                     cache_dir=vae_cache_dir,
                     local_files_only=True,
                 ),
-                safety_checker=None,
                 scheduler=scheduler,
                 torch_dtype=torch.float16,
                 revision=args.revision,
                 cache_dir=cache_dir,
                 local_files_only=True,
             )
+            safety_checker = pipeline.safety_checker
             # save_dir = os.path.join(args.output_dir, f"{step}")
             save_dir = args.output_dir
             pipeline.save_pretrained(save_dir)
@@ -920,6 +920,9 @@ def main(args):
                         width = int(inputs.get("width", 512))
                         height = int(inputs.get("height", 512))
                         num_outputs = int(inputs.get("num_outputs", 1))
+                        disable_safety_check = bool(
+                            inputs.get("disable_safety_check", False)
+                        )
                         num_inference_steps = int(inputs.get("num_inference_steps", 50))
                         guidance_scale = float(inputs.get("guidance_scale", 7.5))
                         scheduler = inputs.get("scheduler", "DDIM")
@@ -932,6 +935,11 @@ def main(args):
                         pipeline.scheduler = make_scheduler(
                             scheduler, pipeline.scheduler.config
                         )
+                        if disable_safety_check:
+                            pipeline.safety_checker = None
+                        else:
+                            pipeline.safety_checker = safety_checker
+
                         generator = torch.Generator("cuda").manual_seed(seed)
                         output = pipeline(
                             prompt=[prompt] * num_outputs
@@ -948,6 +956,9 @@ def main(args):
                         )
 
                         for i, image in enumerate(output.images):
+                            if output.nsfw_content_detected and output.nsfw_content_detected[i]:
+                                print("skipping nsfw detected for", inputs)
+                                continue
                             image.save(os.path.join(sample_dir, f"{name}-{i}.png"))
 
                 del pipeline
