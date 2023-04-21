@@ -6,7 +6,7 @@ From Wikipedia:
 
 > DreamBooth is a deep learning generation model used to fine-tune existing text-to-image models, developed by researchers from Google Research and Boston University in 2022. Originally developed using Google's own Imagen text-to-image model, DreamBooth implementations can be applied to other text-to-image models, where it can allow the model to generate more fine-tuned and personalised outputs after training on three to five images of a subject.
 
-This repository is a copy of the [canonical DreamBooth code](https://github.com/ShivamShrirao/diffusers/tree/main/examples/dreambooth), modified to work with [Cog](https://replicate.com/replicate/cog).
+This repository is a copy of the [canonical DreamBooth code](https://github.com/ShivamShrirao/diffusers/tree/main/examples/dreambooth), modified to work with [Cog](https://github.com/replicate/cog).
 
  [![Replicate](https://replicate.com/replicate/dreambooth/badge)](https://replicate.com/replicate/dreambooth)
 
