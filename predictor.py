@@ -160,6 +160,7 @@ class Predictor(BasePredictor):
         ),
         generate_images: str = Input(
             description='json of samples to generate: [{"name": "sample_name", "input": {"prompt": "a sks dog", "num_samples": 4, "save_guidance_scale": 7.5, "save_infer_steps": 50}}]',
+            default=None,
         ),
     ) -> List[Path]:
         cog_instance_data = "cog_instance_data"
