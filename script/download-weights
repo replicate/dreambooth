@@ -2,12 +2,10 @@
 
 
 import os
-import sys
 import torch
 from diffusers import StableDiffusionPipeline
 from diffusers import (
     AutoencoderKL,
-    DDIMScheduler,
     DDPMScheduler,
     StableDiffusionPipeline,
     UNet2DConditionModel,
@@ -19,8 +17,10 @@ from transformers import CLIPTextModel, CLIPTokenizer
 cache_dir = "stable-diffusion-cache"
 os.makedirs(cache_dir, exist_ok=True)
 
-for model in ("stabilityai/stable-diffusion-2-1-base",):
-
+for model in (
+    "stabilityai/stable-diffusion-2-1",
+    "stabilityai/stable-diffusion-2-1-base",
+):
     pipe = StableDiffusionPipeline.from_pretrained(
         model,
         cache_dir=cache_dir,

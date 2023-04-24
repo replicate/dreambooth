@@ -1,356 +1,121 @@
-import argparse
 import hashlib
 import itertools
-import random
 import json
 import math
 import os
 import gc
-
-# from subprocess import call
-from contextlib import nullcontext
+import logging
 from pathlib import Path
-from typing import Optional
 
+import numpy as np
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
-from torch.utils.data import Dataset
-
+import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
-from accelerate.utils import set_seed
-from diffusers import (
-    AutoencoderKL,
-    DDIMScheduler,
-    DDPMScheduler,
-    StableDiffusionPipeline,
-    UNet2DConditionModel,
-)
-from diffusers.optimization import get_scheduler
-from huggingface_hub import HfFolder, Repository, whoami
+from accelerate.utils import ProjectConfiguration, set_seed
+from packaging import version
 from PIL import Image
+from torch.utils.data import Dataset
 from torchvision import transforms
 from tqdm.auto import tqdm
-from transformers import CLIPTextModel, CLIPTokenizer
+from transformers import AutoTokenizer, CLIPTextModel
+
+import diffusers
+from diffusers import (
+    AutoencoderKL,
+    DDPMScheduler,
+    DiffusionPipeline,
+    DPMSolverMultistepScheduler,
+    UNet2DConditionModel,
+    PNDMScheduler,
+    LMSDiscreteScheduler,
+    DDIMScheduler,
+    EulerDiscreteScheduler,
+    EulerAncestralDiscreteScheduler,
+    DPMSolverMultistepScheduler,
+)
+from diffusers.optimization import get_scheduler
+from diffusers.utils import check_min_version
+from diffusers.utils.import_utils import is_xformers_available
 
 
-# def run_cmd(command):
-#     try:
-#         call(command, shell=True)
-#     except KeyboardInterrupt:
-#         print("Process interrupted")
-#         sys.exit(1)
-
-
-torch.backends.cudnn.benchmark = True
-
+# Will error if the minimal version of diffusers is not installed. Remove at your own risks.
+check_min_version("0.15.1")
 
 logger = get_logger(__name__)
 
 cache_dir = "stable-diffusion-cache"
 
 
-# def parse_args(input_args=None):
-#     parser = argparse.ArgumentParser(description="Simple example of a training script.")
-#     parser.add_argument(
-#         "--pretrained_model_name_or_path",
-#         type=str,
-#         default=None,
-#         required=True,
-#         help="Path to pretrained model or model identifier from huggingface.co/models.",
+# def log_validation(
+#     text_encoder, tokenizer, unet, vae, args, accelerator, weight_dtype, epoch
+# ):
+#     logger.info(
+#         f"Running validation... \n Generating {args.num_validation_images} images with prompt:"
+#         f" {args.validation_prompt}."
 #     )
-#     parser.add_argument(
-#         "--pretrained_vae_name_or_path",
-#         type=str,
-#         default=None,
-#         help="Path to pretrained vae or vae identifier from huggingface.co/models.",
+#     # create pipeline (note: unet and vae are loaded again in float32)
+#     pipeline = DiffusionPipeline.from_pretrained(
+#         args.pretrained_model_name_or_path,
+#         text_encoder=accelerator.unwrap_model(text_encoder),
+#         tokenizer=tokenizer,
+#         unet=accelerator.unwrap_model(unet),
+#         vae=vae,
+#         revision=args.revision,
+#         torch_dtype=weight_dtype,
 #     )
-#     parser.add_argument(
-#         "--revision",
-#         type=str,
-#         default=None,
-#         required=False,
-#         help="Revision of pretrained model identifier from huggingface.co/models.",
+#     pipeline.scheduler = DPMSolverMultistepScheduler.from_config(
+#         pipeline.scheduler.config
 #     )
-#     parser.add_argument(
-#         "--tokenizer_name",
-#         type=str,
-#         default=None,
-#         help="Pretrained tokenizer name or path if not the same as model_name",
-#     )
-#     parser.add_argument(
-#         "--instance_data_dir",
-#         type=str,
-#         default=None,
-#         help="A folder containing the training data of instance images.",
-#     )
-#     parser.add_argument(
-#         "--class_data_dir",
-#         type=str,
-#         default=None,
-#         help="A folder containing the training data of class images.",
-#     )
-#     parser.add_argument(
-#         "--instance_prompt",
-#         type=str,
-#         default=None,
-#         help="The prompt with identifier specifying the instance",
-#     )
-#     parser.add_argument(
-#         "--class_prompt",
-#         type=str,
-#         default=None,
-#         help="The prompt to specify images in the same class as provided instance images.",
-#     )
-#     parser.add_argument(
-#         "--save_sample_prompt",
-#         type=str,
-#         default=None,
-#         help="The prompt used to generate sample outputs to save.",
-#     )
-#     parser.add_argument(
-#         "--save_sample_negative_prompt",
-#         type=str,
-#         default=None,
-#         help="The negative prompt used to generate sample outputs to save.",
-#     )
-#     parser.add_argument(
-#         "--n_save_sample",
-#         type=int,
-#         default=4,
-#         help="The number of samples to save.",
-#     )
-#     parser.add_argument(
-#         "--save_guidance_scale",
-#         type=float,
-#         default=7.5,
-#         help="CFG for save sample.",
-#     )
-#     parser.add_argument(
-#         "--save_infer_steps",
-#         type=int,
-#         default=50,
-#         help="The number of inference steps for save sample.",
-#     )
-#     parser.add_argument(
-#         "--pad_tokens",
-#         default=False,
-#         action="store_true",
-#         help="Flag to pad tokens to length 77.",
-#     )
-#     parser.add_argument(
-#         "--with_prior_preservation",
-#         default=False,
-#         action="store_true",
-#         help="Flag to add prior preservation loss.",
-#     )
-#     parser.add_argument(
-#         "--prior_loss_weight",
-#         type=float,
-#         default=1.0,
-#         help="The weight of prior preservation loss.",
-#     )
-#     parser.add_argument(
-#         "--num_class_images",
-#         type=int,
-#         default=50,
-#         help=(
-#             "Minimal class images for prior preservation loss. If not have enough images, additional images will be"
-#             " sampled with class_prompt."
-#         ),
-#     )
-#     parser.add_argument(
-#         "--output_dir",
-#         type=str,
-#         default="text-inversion-model",
-#         help="The output directory where the model predictions and checkpoints will be written.",
-#     )
-#     parser.add_argument(
-#         "--seed", type=int, default=None, help="A seed for reproducible training."
-#     )
-#     parser.add_argument(
-#         "--resolution",
-#         type=int,
-#         default=512,
-#         help=(
-#             "The resolution for input images, all the images in the train/validation dataset will be resized to this"
-#             " resolution"
-#         ),
-#     )
-#     parser.add_argument(
-#         "--center_crop",
-#         action="store_true",
-#         help="Whether to center crop images before resizing to resolution",
-#     )
-#     parser.add_argument(
-#         "--train_text_encoder",
-#         action="store_true",
-#         help="Whether to train the text encoder",
-#     )
-#     parser.add_argument(
-#         "--train_batch_size",
-#         type=int,
-#         default=4,
-#         help="Batch size (per device) for the training dataloader.",
-#     )
-#     parser.add_argument(
-#         "--sample_batch_size",
-#         type=int,
-#         default=4,
-#         help="Batch size (per device) for sampling images.",
-#     )
-#     parser.add_argument("--num_train_epochs", type=int, default=1)
-#     parser.add_argument(
-#         "--max_train_steps",
-#         type=int,
-#         default=None,
-#         help="Total number of training steps to perform.  If provided, overrides num_train_epochs.",
-#     )
-#     parser.add_argument(
-#         "--gradient_accumulation_steps",
-#         type=int,
-#         default=1,
-#         help="Number of updates steps to accumulate before performing a backward/update pass.",
-#     )
-#     parser.add_argument(
-#         "--gradient_checkpointing",
-#         action="store_true",
-#         help="Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.",
-#     )
-#     parser.add_argument(
-#         "--learning_rate",
-#         type=float,
-#         default=5e-6,
-#         help="Initial learning rate (after the potential warmup period) to use.",
-#     )
-#     parser.add_argument(
-#         "--scale_lr",
-#         action="store_true",
-#         default=False,
-#         help="Scale the learning rate by the number of GPUs, gradient accumulation steps, and batch size.",
-#     )
-#     parser.add_argument(
-#         "--lr_scheduler",
-#         type=str,
-#         default="constant",
-#         help=(
-#             'The scheduler type to use. Choose between ["linear", "cosine", "cosine_with_restarts", "polynomial",'
-#             ' "constant", "constant_with_warmup"]'
-#         ),
-#     )
-#     parser.add_argument(
-#         "--lr_warmup_steps",
-#         type=int,
-#         default=500,
-#         help="Number of steps for the warmup in the lr scheduler.",
-#     )
-#     parser.add_argument(
-#         "--use_8bit_adam",
-#         action="store_true",
-#         help="Whether or not to use 8-bit Adam from bitsandbytes.",
-#     )
-#     parser.add_argument(
-#         "--adam_beta1",
-#         type=float,
-#         default=0.9,
-#         help="The beta1 parameter for the Adam optimizer.",
-#     )
-#     parser.add_argument(
-#         "--adam_beta2",
-#         type=float,
-#         default=0.999,
-#         help="The beta2 parameter for the Adam optimizer.",
-#     )
-#     parser.add_argument(
-#         "--adam_weight_decay", type=float, default=1e-2, help="Weight decay to use."
-#     )
-#     parser.add_argument(
-#         "--adam_epsilon",
-#         type=float,
-#         default=1e-08,
-#         help="Epsilon value for the Adam optimizer",
-#     )
-#     parser.add_argument(
-#         "--max_grad_norm", default=1.0, type=float, help="Max gradient norm."
-#     )
-#     parser.add_argument(
-#         "--push_to_hub",
-#         action="store_true",
-#         help="Whether or not to push the model to the Hub.",
-#     )
-#     parser.add_argument(
-#         "--hub_token",
-#         type=str,
-#         default=None,
-#         help="The token to use to push to the Model Hub.",
-#     )
-#     parser.add_argument(
-#         "--hub_model_id",
-#         type=str,
-#         default=None,
-#         help="The name of the repository to keep in sync with the local `output_dir`.",
-#     )
-#     parser.add_argument(
-#         "--logging_dir",
-#         type=str,
-#         default="logs",
-#         help=(
-#             "[TensorBoard](https://www.tensorflow.org/tensorboard) log directory. Will default to"
-#             " *output_dir/runs/**CURRENT_DATETIME_HOSTNAME***."
-#         ),
-#     )
-#     parser.add_argument(
-#         "--log_interval", type=int, default=10, help="Log every N steps."
-#     )
-#     parser.add_argument(
-#         "--save_interval", type=int, default=10_000, help="Save weights every N steps."
-#     )
-#     parser.add_argument(
-#         "--save_min_steps",
-#         type=int,
-#         default=0,
-#         help="Start saving weights after N steps.",
-#     )
-#     parser.add_argument(
-#         "--mixed_precision",
-#         type=str,
-#         default="no",
-#         choices=["no", "fp16", "bf16"],
-#         help=(
-#             "Whether to use mixed precision. Choose"
-#             "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."
-#             "and an Nvidia Ampere GPU."
-#         ),
-#     )
-#     parser.add_argument(
-#         "--not_cache_latents",
-#         action="store_true",
-#         help="Do not precompute and cache latents from VAE.",
-#     )
-#     parser.add_argument(
-#         "--local_rank",
-#         type=int,
-#         default=-1,
-#         help="For distributed training: local_rank",
-#     )
-#     parser.add_argument(
-#         "--concepts_list",
-#         type=str,
-#         default=None,
-#         help="Path to json containing multiple concepts, will overwrite parameters like instance_prompt, class_prompt, etc.",
-#     )
+#     pipeline = pipeline.to(accelerator.device)
+#     pipeline.set_progress_bar_config(disable=True)
 
-#     if input_args is not None:
-#         args = parser.parse_args(input_args)
-#     else:
-#         args = parser.parse_args()
+#     # run inference
+#     generator = (
+#         None
+#         if args.seed is None
+#         else torch.Generator(device=accelerator.device).manual_seed(args.seed)
+#     )
+#     images = []
+#     for _ in range(args.num_validation_images):
+#         with torch.autocast("cuda"):
+#             image = pipeline(
+#                 args.validation_prompt, num_inference_steps=25, generator=generator
+#             ).images[0]
+#         images.append(image)
 
-#     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
-#     if env_local_rank != -1 and env_local_rank != args.local_rank:
-#         args.local_rank = env_local_rank
+#     for tracker in accelerator.trackers:
+#         if tracker.name == "tensorboard":
+#             np_images = np.stack([np.asarray(img) for img in images])
+#             tracker.writer.add_images(
+#                 "validation", np_images, epoch, dataformats="NHWC"
+#             )
 
-#     return args
+#     del pipeline
+#     torch.cuda.empty_cache()
+
+
+def collate_fn(examples, with_prior_preservation=False):
+    input_ids = [example["instance_prompt_ids"] for example in examples]
+    pixel_values = [example["instance_images"] for example in examples]
+
+    # Concat class and instance examples for prior preservation.
+    # We do this to avoid doing two forward passes.
+    if with_prior_preservation:
+        input_ids += [example["class_prompt_ids"] for example in examples]
+        pixel_values += [example["class_images"] for example in examples]
+
+    pixel_values = torch.stack(pixel_values)
+    pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
+
+    input_ids = torch.cat(input_ids, dim=0)
+
+    batch = {
+        "input_ids": input_ids,
+        "pixel_values": pixel_values,
+    }
+    return batch
 
 
 class DreamBoothDataset(Dataset):
@@ -361,44 +126,43 @@ class DreamBoothDataset(Dataset):
 
     def __init__(
         self,
-        concepts_list,
+        instance_data_root,
+        instance_prompt,
         tokenizer,
-        with_prior_preservation=True,
+        class_data_root=None,
+        class_prompt=None,
+        class_num=None,
         size=512,
         center_crop=False,
-        num_class_images=None,
-        pad_tokens=False,
         hflip=False,
     ):
         self.size = size
         self.center_crop = center_crop
         self.tokenizer = tokenizer
-        self.with_prior_preservation = with_prior_preservation
-        self.pad_tokens = pad_tokens
 
-        self.instance_images_path = []
-        self.class_images_path = []
+        self.instance_data_root = Path(instance_data_root)
+        if not self.instance_data_root.exists():
+            raise ValueError(
+                f"Instance {self.instance_data_root} images root doesn't exists."
+            )
 
-        for concept in concepts_list:
-            inst_img_path = [
-                (x, concept["instance_prompt"])
-                for x in Path(concept["instance_data_dir"]).iterdir()
-                if x.is_file()
-            ]
-            self.instance_images_path.extend(inst_img_path)
-
-            if with_prior_preservation:
-                class_img_path = [
-                    (x, concept["class_prompt"])
-                    for x in Path(concept["class_data_dir"]).iterdir()
-                    if x.is_file()
-                ]
-                self.class_images_path.extend(class_img_path[:num_class_images])
-
-        random.shuffle(self.instance_images_path)
+        self.instance_images_path = list(Path(instance_data_root).iterdir())
         self.num_instance_images = len(self.instance_images_path)
-        self.num_class_images = len(self.class_images_path)
-        self._length = max(self.num_class_images, self.num_instance_images)
+        self.instance_prompt = instance_prompt
+        self._length = self.num_instance_images
+
+        if class_data_root is not None:
+            self.class_data_root = Path(class_data_root)
+            self.class_data_root.mkdir(parents=True, exist_ok=True)
+            self.class_images_path = list(self.class_data_root.iterdir())
+            if class_num is not None:
+                self.num_class_images = min(len(self.class_images_path), class_num)
+            else:
+                self.num_class_images = len(self.class_images_path)
+            self._length = max(self.num_class_images, self.num_instance_images)
+            self.class_prompt = class_prompt
+        else:
+            self.class_data_root = None
 
         self.image_transforms = transforms.Compose(
             [
@@ -419,36 +183,58 @@ class DreamBoothDataset(Dataset):
 
     def __getitem__(self, index):
         example = {}
-        instance_path, instance_prompt = self.instance_images_path[
-            index % self.num_instance_images
-        ]
-        instance_image = Image.open(instance_path)
+        instance_image = Image.open(
+            self.instance_images_path[index % self.num_instance_images]
+        )
         if not instance_image.mode == "RGB":
             instance_image = instance_image.convert("RGB")
         example["instance_images"] = self.image_transforms(instance_image)
         example["instance_prompt_ids"] = self.tokenizer(
-            instance_prompt,
-            padding="max_length" if self.pad_tokens else "do_not_pad",
+            self.instance_prompt,
             truncation=True,
+            padding="max_length",
             max_length=self.tokenizer.model_max_length,
+            return_tensors="pt",
         ).input_ids
 
-        if self.with_prior_preservation:
-            class_path, class_prompt = self.class_images_path[
-                index % self.num_class_images
-            ]
-            class_image = Image.open(class_path)
+        if self.class_data_root:
+            class_image = Image.open(
+                self.class_images_path[index % self.num_class_images]
+            )
             if not class_image.mode == "RGB":
                 class_image = class_image.convert("RGB")
             example["class_images"] = self.image_transforms(class_image)
             example["class_prompt_ids"] = self.tokenizer(
-                class_prompt,
-                padding="max_length" if self.pad_tokens else "do_not_pad",
+                self.class_prompt,
                 truncation=True,
+                padding="max_length",
                 max_length=self.tokenizer.model_max_length,
+                return_tensors="pt",
             ).input_ids
 
         return example
+
+
+def collate_fn(examples, with_prior_preservation=False):
+    input_ids = [example["instance_prompt_ids"] for example in examples]
+    pixel_values = [example["instance_images"] for example in examples]
+
+    # Concat class and instance examples for prior preservation.
+    # We do this to avoid doing two forward passes.
+    if with_prior_preservation:
+        input_ids += [example["class_prompt_ids"] for example in examples]
+        pixel_values += [example["class_images"] for example in examples]
+
+    pixel_values = torch.stack(pixel_values)
+    pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
+
+    input_ids = torch.cat(input_ids, dim=0)
+
+    batch = {
+        "input_ids": input_ids,
+        "pixel_values": pixel_values,
+    }
+    return batch
 
 
 class PromptDataset(Dataset):
@@ -468,40 +254,19 @@ class PromptDataset(Dataset):
         return example
 
 
-class LatentsDataset(Dataset):
-    def __init__(self, latents_cache, text_encoder_cache):
-        self.latents_cache = latents_cache
-        self.text_encoder_cache = text_encoder_cache
-
-    def __len__(self):
-        return len(self.latents_cache)
-
-    def __getitem__(self, index):
-        return self.latents_cache[index], self.text_encoder_cache[index]
-
-
-class AverageMeter:
-    def __init__(self, name=None):
-        self.name = name
-        self.reset()
-
-    def reset(self):
-        self.sum = self.count = self.avg = 0
-
-    def update(self, val, n=1):
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-
-
 def main(args):
-    logging_dir = Path(args.output_dir, "0", args.logging_dir)
+    logging_dir = Path(args.output_dir, args.logging_dir)
+
+    accelerator_project_config = ProjectConfiguration(
+        total_limit=args.checkpoints_total_limit
+    )
 
     accelerator = Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         mixed_precision=args.mixed_precision,
-        log_with="tensorboard",
-        logging_dir=logging_dir,
+        log_with=args.report_to,
+        project_dir=logging_dir,
+        project_config=accelerator_project_config,
     )
 
     # Currently, it's not possible to do gradient accumulation when training two models with accelerate.accumulate
@@ -517,100 +282,103 @@ def main(args):
             "Please set gradient_accumulation_steps to 1. This feature will be supported in the future."
         )
 
+    # Make one log on every process with the configuration for debugging.
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        level=logging.INFO,
+    )
+    logger.info(accelerator.state, main_process_only=False)
+    if accelerator.is_local_main_process:
+        transformers.utils.logging.set_verbosity_warning()
+        diffusers.utils.logging.set_verbosity_info()
+    else:
+        transformers.utils.logging.set_verbosity_error()
+        diffusers.utils.logging.set_verbosity_error()
+
+    # If passed along, set the training seed now.
     if args.seed is not None:
         set_seed(args.seed)
 
-    if args.concepts_list is None:
-        args.concepts_list = [
-            {
-                "instance_prompt": args.instance_prompt,
-                "class_prompt": args.class_prompt,
-                "instance_data_dir": args.instance_data_dir,
-                "class_data_dir": args.class_data_dir,
-            }
-        ]
-    else:
-        with open(args.concepts_list, "r") as f:
-            args.concepts_list = json.load(f)
-
+    # Generate class images if prior preservation is enabled.
     if args.with_prior_preservation:
-        pipeline = None
-        for concept in args.concepts_list:
-            class_images_dir = Path(concept["class_data_dir"])
-            class_images_dir.mkdir(parents=True, exist_ok=True)
-            cur_class_images = len(list(class_images_dir.iterdir()))
+        class_images_dir = Path(args.class_data_dir)
+        if not class_images_dir.exists():
+            class_images_dir.mkdir(parents=True)
+        cur_class_images = len(list(class_images_dir.iterdir()))
 
-            if cur_class_images < args.num_class_images:
-                torch_dtype = (
-                    torch.float16
-                    if accelerator.device.type == "cuda"
-                    else torch.float32
-                )
-                if pipeline is None:
-                    pipeline = StableDiffusionPipeline.from_pretrained(
-                        args.pretrained_model_name_or_path,
-                        torch_dtype=torch_dtype,
-                        safety_checker=None,
-                        revision=args.revision,
-                        cache_dir=cache_dir,
-                        local_files_only=True,
+        if cur_class_images < args.num_class_images:
+            torch_dtype = (
+                torch.float16 if accelerator.device.type == "cuda" else torch.float32
+            )
+            if args.prior_generation_precision == "fp32":
+                torch_dtype = torch.float32
+            elif args.prior_generation_precision == "fp16":
+                torch_dtype = torch.float16
+            elif args.prior_generation_precision == "bf16":
+                torch_dtype = torch.bfloat16
+            pipeline = DiffusionPipeline.from_pretrained(
+                args.pretrained_model_name_or_path,
+                torch_dtype=torch_dtype,
+                safety_checker=None,
+                revision=args.revision,
+                cache_dir=cache_dir,
+                local_files_only=True,
+            )
+            pipeline.set_progress_bar_config(disable=True)
+
+            num_new_images = args.num_class_images - cur_class_images
+            logger.info(f"Number of class images to sample: {num_new_images}.")
+
+            sample_dataset = PromptDataset(args.class_prompt, num_new_images)
+            sample_dataloader = torch.utils.data.DataLoader(
+                sample_dataset, batch_size=args.sample_batch_size
+            )
+
+            sample_dataloader = accelerator.prepare(sample_dataloader)
+            pipeline.to(accelerator.device)
+
+            for example in tqdm(
+                sample_dataloader,
+                desc="Generating class images",
+                disable=not accelerator.is_local_main_process,
+            ):
+                images = pipeline(example["prompt"]).images
+
+                for i, image in enumerate(images):
+                    hash_image = hashlib.sha1(image.tobytes()).hexdigest()
+                    image_filename = (
+                        class_images_dir
+                        / f"{example['index'][i] + cur_class_images}-{hash_image}.jpg"
                     )
-                    pipeline.set_progress_bar_config(disable=True)
-                    pipeline.to(accelerator.device)
+                    image.save(image_filename)
 
-                num_new_images = args.num_class_images - cur_class_images
-                logger.info(f"Number of class images to sample: {num_new_images}.")
-
-                sample_dataset = PromptDataset(concept["class_prompt"], num_new_images)
-                sample_dataloader = torch.utils.data.DataLoader(
-                    sample_dataset, batch_size=args.sample_batch_size
-                )
-
-                sample_dataloader = accelerator.prepare(sample_dataloader)
-
-                with torch.autocast("cuda"), torch.inference_mode():
-                    for example in tqdm(
-                        sample_dataloader,
-                        desc="Generating class images",
-                        disable=not accelerator.is_local_main_process,
-                    ):
-                        images = pipeline(example["prompt"]).images
-
-                        for i, image in enumerate(images):
-                            hash_image = hashlib.sha1(image.tobytes()).hexdigest()
-                            image_filename = (
-                                class_images_dir
-                                / f"{example['index'][i] + cur_class_images}-{hash_image}.jpg"
-                            )
-                            image.save(image_filename)
-
-        del pipeline
-
-        # print("deleting pipeline")
-
-        gc.collect()
-        torch.cuda.empty_cache()
-
-        # call("nvidia-smi")
-        # if torch.cuda.is_available():
-        #     torch.cuda.empty_cache()
+            del pipeline
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
     # Load the tokenizer
     if args.tokenizer_name:
-        tokenizer = CLIPTokenizer.from_pretrained(
-            args.tokenizer_name,
-            revision=args.revision,
+        tokenizer = AutoTokenizer.from_pretrained(
+            args.tokenizer_name, revision=args.revision, use_fast=False
         )
     elif args.pretrained_model_name_or_path:
-        tokenizer = CLIPTokenizer.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
             args.pretrained_model_name_or_path,
             subfolder="tokenizer",
             revision=args.revision,
+            use_fast=False,
             cache_dir=cache_dir,
             local_files_only=True,
         )
 
-    # Load models and create wrapper for stable diffusion
+    # Load scheduler and models
+    noise_scheduler = DDPMScheduler.from_pretrained(
+        args.pretrained_model_name_or_path,
+        subfolder="scheduler",
+        cache_dir=cache_dir,
+        local_files_only=True,
+    )
     text_encoder = CLIPTextModel.from_pretrained(
         args.pretrained_model_name_or_path,
         subfolder="text_encoder",
@@ -638,10 +406,50 @@ def main(args):
     if not args.train_text_encoder:
         text_encoder.requires_grad_(False)
 
+    if args.enable_xformers_memory_efficient_attention:
+        if is_xformers_available():
+            import xformers
+
+            xformers_version = version.parse(xformers.__version__)
+            if xformers_version == version.parse("0.0.16"):
+                logger.warn(
+                    "xFormers 0.0.16 cannot be used for training in some GPUs. If you observe problems during training, please update xFormers to at least 0.0.17. See https://huggingface.co/docs/diffusers/main/en/optimization/xformers for more details."
+                )
+            unet.enable_xformers_memory_efficient_attention()
+        else:
+            raise ValueError(
+                "xformers is not available. Make sure it is installed correctly"
+            )
+
     if args.gradient_checkpointing:
         unet.enable_gradient_checkpointing()
         if args.train_text_encoder:
             text_encoder.gradient_checkpointing_enable()
+
+    # Check that all trainable models are in full precision
+    low_precision_error_string = (
+        "Please make sure to always have all model weights in full float32 precision when starting training - even if"
+        " doing mixed precision training. copy of the weights should still be float32."
+    )
+
+    if accelerator.unwrap_model(unet).dtype != torch.float32:
+        raise ValueError(
+            f"Unet loaded as datatype {accelerator.unwrap_model(unet).dtype}. {low_precision_error_string}"
+        )
+
+    if (
+        args.train_text_encoder
+        and accelerator.unwrap_model(text_encoder).dtype != torch.float32
+    ):
+        raise ValueError(
+            f"Text encoder loaded as datatype {accelerator.unwrap_model(text_encoder).dtype}."
+            f" {low_precision_error_string}"
+        )
+
+    # Enable TF32 for faster training on Ampere GPUs,
+    # cf https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices
+    if args.allow_tf32:
+        torch.backends.cuda.matmul.allow_tf32 = True
 
     if args.scale_lr:
         args.learning_rate = (
@@ -664,6 +472,7 @@ def main(args):
     else:
         optimizer_class = torch.optim.AdamW
 
+    # Optimizer creation
     params_to_optimize = (
         itertools.chain(unet.parameters(), text_encoder.parameters())
         if args.train_text_encoder
@@ -677,101 +486,26 @@ def main(args):
         eps=args.adam_epsilon,
     )
 
-    noise_scheduler = DDPMScheduler.from_config(
-        args.pretrained_model_name_or_path,
-        subfolder="scheduler",
-        cache_dir=cache_dir,
-        local_files_only=True,
-    )
-
+    # Dataset and DataLoaders creation:
     train_dataset = DreamBoothDataset(
-        concepts_list=args.concepts_list,
+        instance_data_root=args.instance_data_dir,
+        instance_prompt=args.instance_prompt,
+        class_data_root=args.class_data_dir if args.with_prior_preservation else None,
+        class_prompt=args.class_prompt,
+        class_num=args.num_class_images,
         tokenizer=tokenizer,
-        with_prior_preservation=args.with_prior_preservation,
         size=args.resolution,
         center_crop=args.center_crop,
-        num_class_images=args.num_class_images,
-        pad_tokens=args.pad_tokens,
         hflip=args.hflip,
     )
-
-    def collate_fn(examples):
-        input_ids = [example["instance_prompt_ids"] for example in examples]
-        pixel_values = [example["instance_images"] for example in examples]
-
-        # Concat class and instance examples for prior preservation.
-        # We do this to avoid doing two forward passes.
-        if args.with_prior_preservation:
-            input_ids += [example["class_prompt_ids"] for example in examples]
-            pixel_values += [example["class_images"] for example in examples]
-
-        pixel_values = torch.stack(pixel_values)
-        pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
-
-        input_ids = tokenizer.pad(
-            {"input_ids": input_ids},
-            padding=True,
-            return_tensors="pt",
-        ).input_ids
-
-        batch = {
-            "input_ids": input_ids,
-            "pixel_values": pixel_values,
-        }
-        return batch
 
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.train_batch_size,
         shuffle=True,
-        collate_fn=collate_fn,
-        pin_memory=True,
+        collate_fn=lambda examples: collate_fn(examples, args.with_prior_preservation),
+        num_workers=args.dataloader_num_workers,
     )
-
-    weight_dtype = torch.float32
-    if args.mixed_precision == "fp16":
-        weight_dtype = torch.float16
-    elif args.mixed_precision == "bf16":
-        weight_dtype = torch.bfloat16
-
-    # Move text_encode and vae to gpu.
-    # For mixed precision training we cast the text_encoder and vae weights to half-precision
-    # as these models are only used for inference, keeping weights in full precision is not required.
-    vae.to(accelerator.device, dtype=weight_dtype)
-    if not args.train_text_encoder:
-        text_encoder.to(accelerator.device, dtype=weight_dtype)
-
-    if not args.not_cache_latents:
-        latents_cache = []
-        text_encoder_cache = []
-        for batch in tqdm(train_dataloader, desc="Caching latents"):
-            with torch.no_grad():
-                batch["pixel_values"] = batch["pixel_values"].to(
-                    accelerator.device, non_blocking=True, dtype=weight_dtype
-                )
-                batch["input_ids"] = batch["input_ids"].to(
-                    accelerator.device, non_blocking=True
-                )
-                latents_cache.append(vae.encode(batch["pixel_values"]).latent_dist)
-                if args.train_text_encoder:
-                    text_encoder_cache.append(batch["input_ids"])
-                else:
-                    text_encoder_cache.append(text_encoder(batch["input_ids"])[0])
-        train_dataset = LatentsDataset(latents_cache, text_encoder_cache)
-        train_dataloader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=1, collate_fn=lambda x: x, shuffle=True
-        )
-
-        del vae
-        if not args.train_text_encoder:
-            del text_encoder
-        # if torch.cuda.is_available():
-        #     torch.cuda.empty_cache()
-
-        gc.collect()
-        torch.cuda.empty_cache()
-
-        # call("nvidia-smi")
 
     # Scheduler and math around the number of training steps.
     overrode_max_train_steps = False
@@ -787,8 +521,11 @@ def main(args):
         optimizer=optimizer,
         num_warmup_steps=args.lr_warmup_steps * args.gradient_accumulation_steps,
         num_training_steps=args.max_train_steps * args.gradient_accumulation_steps,
+        num_cycles=args.lr_num_cycles,
+        power=args.lr_power,
     )
 
+    # Prepare everything with our `accelerator`.
     if args.train_text_encoder:
         (
             unet,
@@ -804,6 +541,19 @@ def main(args):
             unet, optimizer, train_dataloader, lr_scheduler
         )
 
+    # For mixed precision training we cast the text_encoder and vae weights to half-precision
+    # as these models are only used for inference, keeping weights in full precision is not required.
+    weight_dtype = torch.float32
+    if accelerator.mixed_precision == "fp16":
+        weight_dtype = torch.float16
+    elif accelerator.mixed_precision == "bf16":
+        weight_dtype = torch.bfloat16
+
+    # Move vae and text_encoder to device and cast to weight_dtype
+    vae.to(accelerator.device, dtype=weight_dtype)
+    if not args.train_text_encoder:
+        text_encoder.to(accelerator.device, dtype=weight_dtype)
+
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     num_update_steps_per_epoch = math.ceil(
         len(train_dataloader) / args.gradient_accumulation_steps
@@ -816,7 +566,7 @@ def main(args):
     # We need to initialize the trackers we use, and also store our configuration.
     # The trackers initializes automatically on the main process.
     if accelerator.is_main_process:
-        accelerator.init_trackers("dreambooth")
+        accelerator.init_trackers("dreambooth", config=vars(args))
 
     # Train!
     total_batch_size = (
@@ -835,102 +585,72 @@ def main(args):
     )
     logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
     logger.info(f"  Total optimization steps = {args.max_train_steps}")
+    global_step = 0
+    first_epoch = 0
 
-    def save_weights(step):
-        # Create the pipeline using using the trained modules and save it.
-        if accelerator.is_main_process:
-            if args.train_text_encoder:
-                text_enc_model = accelerator.unwrap_model(text_encoder)
-            else:
-                text_enc_model = CLIPTextModel.from_pretrained(
-                    args.pretrained_model_name_or_path,
-                    subfolder="text_encoder",
-                    revision=args.revision,
-                    cache_dir=cache_dir,
-                    local_files_only=True,
-                )
-            scheduler = DDIMScheduler(
-                beta_start=0.00085,
-                beta_end=0.012,
-                beta_schedule="scaled_linear",
-                clip_sample=False,
-                set_alpha_to_one=False,
+    # Potentially load in the weights and states from a previous save
+    if args.resume_from_checkpoint:
+        if args.resume_from_checkpoint != "latest":
+            path = os.path.basename(args.resume_from_checkpoint)
+        else:
+            # Get the mos recent checkpoint
+            dirs = os.listdir(args.output_dir)
+            dirs = [d for d in dirs if d.startswith("checkpoint")]
+            dirs = sorted(dirs, key=lambda x: int(x.split("-")[1]))
+            path = dirs[-1] if len(dirs) > 0 else None
+
+        if path is None:
+            accelerator.print(
+                f"Checkpoint '{args.resume_from_checkpoint}' does not exist. Starting a new training run."
             )
-            pipeline = StableDiffusionPipeline.from_pretrained(
-                args.pretrained_model_name_or_path,
-                unet=accelerator.unwrap_model(unet).to(torch.float16),
-                text_encoder=text_enc_model.to(torch.float16),
-                safety_checker=None,
-                scheduler=scheduler,
-                torch_dtype=torch.float16,
-                revision=args.revision,
-                cache_dir=cache_dir,
-                local_files_only=True,
+            args.resume_from_checkpoint = None
+        else:
+            accelerator.print(f"Resuming from checkpoint {path}")
+            accelerator.load_state(os.path.join(args.output_dir, path))
+            global_step = int(path.split("-")[1])
+
+            resume_global_step = global_step * args.gradient_accumulation_steps
+            first_epoch = global_step // num_update_steps_per_epoch
+            resume_step = resume_global_step % (
+                num_update_steps_per_epoch * args.gradient_accumulation_steps
             )
-            # save_dir = os.path.join(args.output_dir, f"{step}")
-            save_dir = args.output_dir
-            pipeline.save_pretrained(save_dir)
-            with open(os.path.join(save_dir, "args.json"), "w") as f:
-                json.dump(args.__dict__, f, indent=2)
-
-            if args.save_sample_prompt is not None:
-                pipeline = pipeline.to(accelerator.device)
-                g_cuda = torch.Generator(device=accelerator.device).manual_seed(
-                    args.seed
-                )
-                pipeline.set_progress_bar_config(disable=True)
-                sample_dir = os.path.join(save_dir, "samples")
-                os.makedirs(sample_dir, exist_ok=True)
-                with torch.autocast("cuda"), torch.inference_mode():
-                    for i in tqdm(range(args.n_save_sample), desc="Generating samples"):
-                        images = pipeline(
-                            args.save_sample_prompt,
-                            negative_prompt=args.save_sample_negative_prompt,
-                            guidance_scale=args.save_guidance_scale,
-                            num_inference_steps=args.save_infer_steps,
-                            generator=g_cuda,
-                        ).images
-                        images[0].save(os.path.join(sample_dir, f"{i}.png"))
-                del pipeline
-                # if torch.cuda.is_available():
-                #     torch.cuda.empty_cache()
-
-                # print("deleting pipeline 22")
-
-                gc.collect()
-                torch.cuda.empty_cache()
-                # call("nvidia-smi")
-
-            print(f"[*] Weights saved at {save_dir}")
-            unet.to(torch.float32)
-            text_enc_model.to(torch.float32)
 
     # Only show the progress bar once on each machine.
     progress_bar = tqdm(
-        range(args.max_train_steps), disable=not accelerator.is_local_main_process
+        range(global_step, args.max_train_steps),
+        disable=not accelerator.is_local_main_process,
     )
     progress_bar.set_description("Steps")
-    global_step = 0
-    loss_avg = AverageMeter()
-    text_enc_context = nullcontext() if args.train_text_encoder else torch.no_grad()
-    for epoch in range(args.num_train_epochs):
+
+    for epoch in range(first_epoch, args.num_train_epochs):
         unet.train()
         if args.train_text_encoder:
             text_encoder.train()
         for step, batch in enumerate(train_dataloader):
+            # Skip steps until we reach the resumed step
+            if (
+                args.resume_from_checkpoint
+                and epoch == first_epoch
+                and step < resume_step
+            ):
+                if step % args.gradient_accumulation_steps == 0:
+                    progress_bar.update(1)
+                continue
+
             with accelerator.accumulate(unet):
                 # Convert images to latent space
-                with torch.no_grad():
-                    if not args.not_cache_latents:
-                        latent_dist = batch[0][0]
-                    else:
-                        latent_dist = vae.encode(
-                            batch["pixel_values"].to(dtype=weight_dtype)
-                        ).latent_dist
-                    latents = latent_dist.sample() * 0.18215
+                latents = vae.encode(
+                    batch["pixel_values"].to(dtype=weight_dtype)
+                ).latent_dist.sample()
+                latents = latents * vae.config.scaling_factor
 
                 # Sample noise that we'll add to the latents
-                noise = torch.randn_like(latents)
+                if args.offset_noise:
+                    noise = torch.randn_like(latents) + 0.1 * torch.randn(
+                        latents.shape[0], latents.shape[1], 1, 1, device=latents.device
+                    )
+                else:
+                    noise = torch.randn_like(latents)
                 bsz = latents.shape[0]
                 # Sample a random timestep for each image
                 timesteps = torch.randint(
@@ -946,81 +666,187 @@ def main(args):
                 noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
 
                 # Get the text embedding for conditioning
-                with text_enc_context:
-                    if not args.not_cache_latents:
-                        if args.train_text_encoder:
-                            encoder_hidden_states = text_encoder(batch[0][1])[0]
-                        else:
-                            encoder_hidden_states = batch[0][1]
-                    else:
-                        encoder_hidden_states = text_encoder(batch["input_ids"])[0]
+                encoder_hidden_states = text_encoder(batch["input_ids"])[0]
 
                 # Predict the noise residual
-                noise_pred = unet(
+                model_pred = unet(
                     noisy_latents, timesteps, encoder_hidden_states
                 ).sample
 
+                # Get the target for loss depending on the prediction type
+                if noise_scheduler.config.prediction_type == "epsilon":
+                    target = noise
+                elif noise_scheduler.config.prediction_type == "v_prediction":
+                    target = noise_scheduler.get_velocity(latents, noise, timesteps)
+                else:
+                    raise ValueError(
+                        f"Unknown prediction type {noise_scheduler.config.prediction_type}"
+                    )
+
                 if args.with_prior_preservation:
-                    # Chunk the noise and noise_pred into two parts and compute the loss on each part separately.
-                    noise_pred, noise_pred_prior = torch.chunk(noise_pred, 2, dim=0)
-                    noise, noise_prior = torch.chunk(noise, 2, dim=0)
+                    # Chunk the noise and model_pred into two parts and compute the loss on each part separately.
+                    model_pred, model_pred_prior = torch.chunk(model_pred, 2, dim=0)
+                    target, target_prior = torch.chunk(target, 2, dim=0)
 
                     # Compute instance loss
-                    loss = (
-                        F.mse_loss(noise_pred.float(), noise.float(), reduction="none")
-                        .mean([1, 2, 3])
-                        .mean()
+                    loss = F.mse_loss(
+                        model_pred.float(), target.float(), reduction="mean"
                     )
 
                     # Compute prior loss
                     prior_loss = F.mse_loss(
-                        noise_pred_prior.float(), noise_prior.float(), reduction="mean"
+                        model_pred_prior.float(), target_prior.float(), reduction="mean"
                     )
 
                     # Add the prior loss to the instance loss.
                     loss = loss + args.prior_loss_weight * prior_loss
                 else:
                     loss = F.mse_loss(
-                        noise_pred.float(), noise.float(), reduction="mean"
+                        model_pred.float(), target.float(), reduction="mean"
                     )
 
                 accelerator.backward(loss)
-                # if accelerator.sync_gradients:
-                #     params_to_clip = (
-                #         itertools.chain(unet.parameters(), text_encoder.parameters())
-                #         if args.train_text_encoder
-                #         else unet.parameters()
-                #     )
-                #     accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
+                if accelerator.sync_gradients:
+                    params_to_clip = (
+                        itertools.chain(unet.parameters(), text_encoder.parameters())
+                        if args.train_text_encoder
+                        else unet.parameters()
+                    )
+                    accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
                 optimizer.step()
                 lr_scheduler.step()
-                optimizer.zero_grad(set_to_none=True)
-                loss_avg.update(loss.detach_(), bsz)
+                optimizer.zero_grad(set_to_none=args.set_grads_to_none)
 
-            if not global_step % args.log_interval:
-                logs = {
-                    "loss": loss_avg.avg.item(),
-                    "lr": lr_scheduler.get_last_lr()[0],
-                }
-                progress_bar.set_postfix(**logs)
-                accelerator.log(logs, step=global_step)
+            # Checks if the accelerator has performed an optimization step behind the scenes
+            if accelerator.sync_gradients:
+                progress_bar.update(1)
+                global_step += 1
 
-            # disable saving weights before final step
-            # if (
-            #     global_step > 0
-            #     and not global_step % args.save_interval
-            #     and global_step >= args.save_min_steps
-            # ):
-            #     save_weights(global_step)
+                # Don't save checkpoint and don't generate validations
+                # if accelerator.is_main_process:
+                #     if global_step % args.checkpointing_steps == 0:
+                #         save_path = os.path.join(
+                #             args.output_dir, f"checkpoint-{global_step}"
+                #         )
+                #         accelerator.save_state(save_path)
+                #         logger.info(f"Saved state to {save_path}")
 
-            progress_bar.update(1)
-            global_step += 1
+                #     if (
+                #         args.validation_prompt is not None
+                #         and global_step % args.validation_steps == 0
+                #     ):
+                #         log_validation(
+                #             text_encoder,
+                #             tokenizer,
+                #             unet,
+                #             vae,
+                #             args,
+                #             accelerator,
+                #             weight_dtype,
+                #             epoch,
+                #         )
+
+            logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
+            progress_bar.set_postfix(**logs)
+            accelerator.log(logs, step=global_step)
 
             if global_step >= args.max_train_steps:
                 break
 
-        accelerator.wait_for_everyone()
+    # Create the pipeline using using the trained modules and save it.
+    accelerator.wait_for_everyone()
+    if accelerator.is_main_process:
+        pipeline = DiffusionPipeline.from_pretrained(
+            args.pretrained_model_name_or_path,
+            unet=accelerator.unwrap_model(unet),
+            text_encoder=accelerator.unwrap_model(text_encoder),
+            safety_checker=None,
+            torch_dtype=torch.float16,
+            revision=args.revision,
+            cache_dir=cache_dir,
+            local_files_only=True,
+        )
+        pipeline.save_pretrained(args.output_dir)
+        with open(os.path.join(args.output_dir, "args.json"), "w") as f:
+            json.dump(args.__dict__, f, indent=2)
 
-    save_weights(global_step)
+        # Replicate add-on
+        safety_checker = pipeline.safety_checker
+        if args.generate_images is not None:
+            pipeline = pipeline.to(accelerator.device)
+            pipeline.set_progress_bar_config(disable=True)
+
+            with torch.autocast("cuda"), torch.inference_mode():
+                for info in tqdm(args.generate_images, desc="Generating samples"):
+                    name = info["name"]
+                    input = info["input"]
+                    prompt = input["prompt"]
+                    negative_prompt = input.get("negative_prompt")
+                    width = int(input.get("width", 512))
+                    height = int(input.get("height", 512))
+                    num_outputs = int(input.get("num_outputs", 1))
+                    disable_safety_check = bool(
+                        input.get("disable_safety_check", False)
+                    )
+                    num_inference_steps = int(input.get("num_inference_steps", 50))
+                    guidance_scale = float(input.get("guidance_scale", 7.5))
+                    scheduler = input.get("scheduler", "DDIM")
+                    seed = input.get("seed")
+                    if seed is None:
+                        seed = int.from_bytes(os.urandom(2), "big")
+                    else:
+                        seed = int(seed)
+
+                    pipeline.scheduler = make_scheduler(
+                        scheduler, pipeline.scheduler.config
+                    )
+                    if disable_safety_check:
+                        pipeline.safety_checker = None
+                    else:
+                        pipeline.safety_checker = safety_checker
+
+                    generator = torch.Generator("cuda").manual_seed(seed)
+                    output = pipeline(
+                        prompt=[prompt] * num_outputs if prompt is not None else None,
+                        negative_prompt=[negative_prompt] * num_outputs
+                        if negative_prompt is not None
+                        else None,
+                        guidance_scale=guidance_scale,
+                        generator=generator,
+                        num_inference_steps=num_inference_steps,
+                        width=width,
+                        height=height,
+                    )
+
+                    for i, image in enumerate(output.images):
+                        if (
+                            output.nsfw_content_detected
+                            and output.nsfw_content_detected[i]
+                        ):
+                            print("skipping nsfw detected for", inputs)
+                            continue
+                        image.save(
+                            os.path.join(args.generate_images_dir, f"{name}-{i}.png")
+                        )
+
+        del pipeline
+        gc.collect()
+        torch.cuda.empty_cache()
+
+        print(f"[*] Weights saved at {args.output_dir}")
+
+        if args.push_to_hub:
+            print(f"push_to_hub not implemented")
 
     accelerator.end_training()
+
+
+def make_scheduler(name, config):
+    return {
+        "PNDM": PNDMScheduler.from_config(config),
+        "KLMS": LMSDiscreteScheduler.from_config(config),
+        "DDIM": DDIMScheduler.from_config(config),
+        "K_EULER": EulerDiscreteScheduler.from_config(config),
+        "K_EULER_ANCESTRAL": EulerAncestralDiscreteScheduler.from_config(config),
+        "DPMSolverMultistep": DPMSolverMultistepScheduler.from_config(config),
+    }[name]
