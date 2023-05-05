@@ -2,16 +2,20 @@ import os
 import gc
 import mimetypes
 import shutil
-import tempfile
+import tarfile
 from zipfile import ZipFile
 from subprocess import call, check_call
 from argparse import Namespace
 import time
 import torch
 
-from cog import BasePredictor, Input, Path
+from cog import BaseModel, BasePredictor, Input, Path
 
 from dreambooth import main
+
+
+class TrainingOutput(BaseModel):
+    weights: Path
 
 
 def run_cmd(command):
@@ -196,8 +200,7 @@ class Predictor(BasePredictor):
         #     default=10000,
         #     description="Save weights every N steps.",
         # ),
-    ) -> Path:
-
+    ) -> TrainingOutput:
         cog_instance_data = "cog_instance_data"
         cog_class_data = "cog_class_data"
         cog_output_dir = "checkpoints"
@@ -292,12 +295,12 @@ class Predictor(BasePredictor):
         torch.cuda.empty_cache()
         call("nvidia-smi")
 
-        out_path = "output.zip"
+        out_path = "weights.tar"
 
         directory = Path(cog_output_dir)
-        with ZipFile(out_path, "w") as zip:
+        with tarfile.open(out_path, "w") as tar:
             for file_path in directory.rglob("*"):
                 print(file_path)
-                zip.write(file_path, arcname=file_path.relative_to(directory))
+                tar.add(file_path, arcname=file_path.relative_to(directory))
 
-        return Path(out_path)
+        return TrainingOutput(weights=Path(out_path))
