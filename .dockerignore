@@ -1,0 +1,5 @@
+weights
+*.png
+cog_class_data
+checkpoints
+cog_instance_data

@@ -1,6 +1,6 @@
 import json
 import os
-from typing import List
+from typing import List, Optional
 
 import torch
 from cog import BasePredictor, Input, Path
@@ -14,18 +14,9 @@ from diffusers import (
     EulerAncestralDiscreteScheduler,
     DPMSolverMultistepScheduler,
 )
-from diffusers.pipelines.stable_diffusion.safety_checker import (
-    StableDiffusionSafetyChecker,
-)
+
 from PIL import Image
-from transformers import CLIPFeatureExtractor
-
-
-SAFETY_MODEL_CACHE = "diffusers-cache"
-SAFETY_MODEL_ID = "CompVis/stable-diffusion-safety-checker"
-
-if not os.path.exists("weights"):
-    raise ValueError("dreambooth weights not found")
+import subprocess
 
 DEFAULT_HEIGHT = 512
 DEFAULT_WIDTH = 512
@@ -34,36 +25,22 @@ DEFAULT_SCHEDULER = "DDIM"
 # grab instance_prompt from weights,
 # unless empty string or not existent
 
-DEFAULT_PROMPT = None
-try:
-    with open("weights/args.json") as f:
-        args = json.load(f)
-        DEFAULT_PROMPT = args["instance_prompt"]
-except:
-    pass
-if not DEFAULT_PROMPT:
-    DEFAULT_PROMPT = "a photo of an astronaut riding a horse on mars"
+DEFAULT_PROMPT = "a photo of an astronaut riding a horse on mars"
 
 
 class Predictor(BasePredictor):
-    def setup(self):
+    def setup(self, weights: Optional[Path] = None):
         """Load the model into memory to make running multiple predictions efficient"""
-        print("Loading Safety pipeline...")
-        self.safety_checker = StableDiffusionSafetyChecker.from_pretrained(
-            SAFETY_MODEL_ID,
-            cache_dir=SAFETY_MODEL_CACHE,
-            torch_dtype=torch.float16,
-            local_files_only=True,
-        ).to("cuda")
-        feature_extractor = CLIPFeatureExtractor.from_pretrained(
-            "openai/clip-vit-base-patch32", cache_dir=SAFETY_MODEL_CACHE
-        )
+        print("Downloading weights...")
+
+        if not weights:
+            return
+
+        subprocess.check_output(["/src/pgettar", weights, "/src/weights", str(16)])
 
         print("Loading SD pipeline...")
         self.txt2img_pipe = StableDiffusionPipeline.from_pretrained(
-            "weights",
-            safety_checker=self.safety_checker,
-            feature_extractor=feature_extractor,
+            "/src/weights",
             torch_dtype=torch.float16,
         ).to("cuda")
 
@@ -76,6 +53,9 @@ class Predictor(BasePredictor):
             safety_checker=self.txt2img_pipe.safety_checker,
             feature_extractor=self.txt2img_pipe.feature_extractor,
         ).to("cuda")
+
+        self.safety_checker = self.txt2img_pipe.safety_checker
+        self.feature_extractor = self.txt2img_pipe.feature_extractor
 
     @torch.inference_mode()
     def predict(

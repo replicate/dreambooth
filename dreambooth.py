@@ -495,7 +495,6 @@ class AverageMeter:
         self.avg = self.sum / self.count
 
 
-
 def main(args):
     logging_dir = Path(args.output_dir, "0", args.logging_dir)
 
@@ -885,7 +884,6 @@ def main(args):
                     cache_dir=vae_cache_dir,
                     local_files_only=True,
                 ),
-                safety_checker=None,
                 scheduler=scheduler,
                 torch_dtype=torch.float16,
                 revision=args.revision,

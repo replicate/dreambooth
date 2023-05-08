@@ -29,8 +29,8 @@ def run_cmd(command):
 class Predictor(BasePredictor):
     def setup(self):
         # HACK: wait a little bit for instance to be ready
-        time.sleep(10)
-        check_call("nvidia-smi", shell=True)
+        # time.sleep(10)
+        # check_call("nvidia-smi", shell=True)
         assert torch.cuda.is_available()
 
     def predict(
