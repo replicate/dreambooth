@@ -3,6 +3,7 @@ import gc
 import mimetypes
 import shutil
 import tarfile
+import subprocess
 from zipfile import ZipFile
 from subprocess import call, check_call
 from argparse import Namespace
@@ -32,6 +33,16 @@ class Predictor(BasePredictor):
         # time.sleep(10)
         # check_call("nvidia-smi", shell=True)
         assert torch.cuda.is_available()
+
+        if not os.path.exists("/src/sd15"):
+            subprocess.check_call(
+                [
+                    "/src/pgettar",
+                    "https://storage.googleapis.com/replicant-misc/sd15.tar",
+                    "sd15",
+                    str(16),
+                ]
+            )
 
     def predict(
         self,
@@ -201,6 +212,7 @@ class Predictor(BasePredictor):
         #     description="Save weights every N steps.",
         # ),
     ) -> TrainingOutput:
+        start = time.time()
         cog_instance_data = "cog_instance_data"
         cog_class_data = "cog_class_data"
         cog_output_dir = "checkpoints"
@@ -235,8 +247,7 @@ class Predictor(BasePredictor):
 
         # some settings are fixed for the replicate model
         args = {
-            "pretrained_model_name_or_path": "runwayml/stable-diffusion-v1-5",
-            "pretrained_vae_name_or_path": "stabilityai/sd-vae-ft-mse",
+            "pretrained_model_name_or_path": "sd15",
             "revision": "fp16",
             "tokenizer_name": None,
             "instance_data_dir": cog_instance_data,
@@ -300,7 +311,12 @@ class Predictor(BasePredictor):
         directory = Path(cog_output_dir)
         with tarfile.open(out_path, "w") as tar:
             for file_path in directory.rglob("*"):
+                if file_path.is_dir():
+                    continue
                 print(file_path)
                 tar.add(file_path, arcname=file_path.relative_to(directory))
 
+        print(f"Elapsed time: {time.time() - start} seconds")
+
+        print(subprocess.check_output("/usr/bin/date"))
         return TrainingOutput(weights=Path(out_path))

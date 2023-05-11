@@ -34,7 +34,8 @@ class Predictor(BasePredictor):
         print("Downloading weights...")
 
         if not weights:
-            return
+            # default to SD1.5 for "predict" view of the trainer?
+            weights = "https://storage.googleapis.com/replicant-misc/sd15.tar"
 
         subprocess.check_output(["/src/pgettar", weights, "/src/weights", str(16)])
 
