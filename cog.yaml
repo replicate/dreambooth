@@ -12,5 +12,4 @@ build:
     - "accelerate==0.15.0"
     - "bitsandbytes==0.35.4"
 
-predict: "predict.py:Predictor"
-train: "train.py:Predictor"
+predict: "train.py:Predictor"
