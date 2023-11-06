@@ -48,7 +48,7 @@ torch.backends.cudnn.benchmark = True
 
 logger = get_logger(__name__)
 
-cache_dir = "stable-diffusion-v1-5-cache"
+cache_dir = "stable-diffusion-cache"
 vae_cache_dir = "sd-vae-ft-mse-cache"
 
 
@@ -495,7 +495,6 @@ class AverageMeter:
         self.avg = self.sum / self.count
 
 
-
 def main(args):
     logging_dir = Path(args.output_dir, "0", args.logging_dir)
 
@@ -551,15 +550,17 @@ def main(args):
                 if pipeline is None:
                     pipeline = StableDiffusionPipeline.from_pretrained(
                         args.pretrained_model_name_or_path,
+                        # Original: pretrained sd-ve-sme
                         vae=AutoencoderKL.from_pretrained(
-                            args.pretrained_vae_name_or_path
-                            or args.pretrained_model_name_or_path,
-                            subfolder=None
-                            if args.pretrained_vae_name_or_path
-                            else "vae",
-                            revision=None
-                            if args.pretrained_vae_name_or_path
-                            else args.revision,
+                            # args.pretrained_vae_name_or_path
+                            # or args.pretrained_model_name_or_path,
+                            args.pretrained_model_name_or_path,
+                            # subfolder=None if args.pretrained_vae_name_or_path else "vae",
+                            subfolder="vae",
+                            # revision=None
+                            # if args.pretrained_vae_name_or_path
+                            # else args.revision,
+                            revision=args.revision,
                             cache_dir=vae_cache_dir,
                             local_files_only=True,
                             torch_dtype=torch_dtype,
@@ -875,13 +876,17 @@ def main(args):
                 args.pretrained_model_name_or_path,
                 unet=accelerator.unwrap_model(unet).to(torch.float16),
                 text_encoder=text_enc_model.to(torch.float16),
+                # Original: pretrained sd-ve-sme
                 vae=AutoencoderKL.from_pretrained(
-                    args.pretrained_vae_name_or_path
-                    or args.pretrained_model_name_or_path,
-                    subfolder=None if args.pretrained_vae_name_or_path else "vae",
-                    revision=None
-                    if args.pretrained_vae_name_or_path
-                    else args.revision,
+                    # args.pretrained_vae_name_or_path
+                    # or args.pretrained_model_name_or_path,
+                    args.pretrained_model_name_or_path,
+                    # subfolder=None if args.pretrained_vae_name_or_path else "vae",
+                    subfolder="vae",
+                    # revision=None
+                    # if args.pretrained_vae_name_or_path
+                    # else args.revision,
+                    revision=args.revision,
                     cache_dir=vae_cache_dir,
                     local_files_only=True,
                 ),
