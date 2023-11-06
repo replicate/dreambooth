@@ -16,52 +16,49 @@ from diffusers import (
 from transformers import CLIPTextModel, CLIPTokenizer
 
 
-cache_dir = "stable-diffusion-v1-5-cache"
+cache_dir = "stable-diffusion-cache"
 vae_cache_dir = "sd-vae-ft-mse-cache"
 os.makedirs(cache_dir, exist_ok=True)
 os.makedirs(vae_cache_dir, exist_ok=True)
 
 pipe = StableDiffusionPipeline.from_pretrained(
-    "runwayml/stable-diffusion-v1-5",
+    "Yntec/epiCPhotoGasm",
     cache_dir=cache_dir,
-    revision="fp16",
+    # revision="fp16",
     torch_dtype=torch.float16,
 )
 
 tokenizer = CLIPTokenizer.from_pretrained(
-    "runwayml/stable-diffusion-v1-5",
+    "Yntec/epiCPhotoGasm",
     subfolder="tokenizer",
     cache_dir=cache_dir,
-    revision="fp16",
+    # revision="fp16",
 )
 
 text_encoder = CLIPTextModel.from_pretrained(
-    "runwayml/stable-diffusion-v1-5",
+    "Yntec/epiCPhotoGasm",
     subfolder="text_encoder",
     cache_dir=cache_dir,
-    revision="fp16",
+    # revision="fp16",
 )
 vae = AutoencoderKL.from_pretrained(
-    "runwayml/stable-diffusion-v1-5",
+    "Yntec/epiCPhotoGasm",
     subfolder="vae",
     cache_dir=cache_dir,
-    revision="fp16",
+    # revision="fp16",
 )
 pretrained_vae = AutoencoderKL.from_pretrained(
-    "stabilityai/sd-vae-ft-mse",
-    subfolder=None,
-    cache_dir=vae_cache_dir,
-    revision=None
+    "stabilityai/sd-vae-ft-mse", subfolder=None, cache_dir=vae_cache_dir, revision=None
 )
 unet = UNet2DConditionModel.from_pretrained(
-    "runwayml/stable-diffusion-v1-5",
+    "Yntec/epiCPhotoGasm",
     subfolder="unet",
     cache_dir=cache_dir,
-    revision="fp16",
+    # revision="fp16",
 )
 
 noise_scheduler = DDPMScheduler.from_config(
-    "runwayml/stable-diffusion-v1-5",
+    "Yntec/epiCPhotoGasm",
     subfolder="scheduler",
     cache_dir=cache_dir,
 )

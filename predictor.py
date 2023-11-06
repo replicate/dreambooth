@@ -33,7 +33,7 @@ class Predictor(BasePredictor):
         self,
         # pretrained_model: str = Input(
         #     description="Model identifier from huggingface.co/models",
-        #     default="runwayml/stable-diffusion-v1-5",
+        #     default="Yntec/epiCPhotoGasm",
         # ),
         # huggingface_token: str = Input(
         #     description="Provide your huggingface token to download the models.",
@@ -192,12 +192,15 @@ class Predictor(BasePredictor):
             default=1.0,
             description="Max gradient norm.",
         ),
+        revision: str = Input(
+            default=None,
+            description="SD model revision",
+        ),
         # save_interval: int = Input(
         #     default=10000,
         #     description="Save weights every N steps.",
         # ),
     ) -> Path:
-
         cog_instance_data = "cog_instance_data"
         cog_class_data = "cog_class_data"
         cog_output_dir = "checkpoints"
@@ -232,9 +235,9 @@ class Predictor(BasePredictor):
 
         # some settings are fixed for the replicate model
         args = {
-            "pretrained_model_name_or_path": "runwayml/stable-diffusion-v1-5",
+            "pretrained_model_name_or_path": "Yntec/epiCPhotoGasm",
             "pretrained_vae_name_or_path": "stabilityai/sd-vae-ft-mse",
-            "revision": "fp16",
+            "revision": revision,
             "tokenizer_name": None,
             "instance_data_dir": cog_instance_data,
             "class_data_dir": cog_class_data,
