@@ -62,6 +62,10 @@ class Predictor(BasePredictor):
         instance_prompt: str = Input(
             description="The prompt you use to describe your training images, in the format: `a [identifier] [class noun]`, where the `[identifier]` should be a rare token. Relatively short sequences with 1-3 letters work the best (e.g. `sks`, `xjy`). `[class noun]` is a coarse class descriptor of the subject (e.g. cat, dog, watch, etc.). For example, your `instance_prompt` can be: `a sks dog`, or with some extra description `a photo of a sks dog`. The trained model will learn to bind a unique identifier with your specific subject in the `instance_data`.",
         ),
+        instance_prompt_use_file: bool = Input(
+            description="Whether to append to instance prompt from file.",
+            default=False,
+        ),
         class_prompt: str = Input(
             description="The prompt or description of the coarse class of your training images, in the format of `a [class noun]`, optionally with some extra description. `class_prompt` is used to alleviate overfitting to your customised images (the trained model should still keep the learnt prior so that it can still generate different dogs when the `[identifier]` is not in the prompt). Corresponding to the examples of the `instant_prompt` above, the `class_prompt` can be `a dog` or `a photo of a dog`.",
         ),
@@ -239,6 +243,7 @@ class Predictor(BasePredictor):
             "instance_data_dir": cog_instance_data,
             "class_data_dir": cog_class_data,
             "instance_prompt": instance_prompt,
+            "instance_prompt_use_file": instance_prompt_use_file,
             "class_prompt": class_prompt,
             "save_sample_prompt": save_sample_prompt,
             "save_sample_negative_prompt": save_sample_negative_prompt,
