@@ -549,6 +549,7 @@ def main(args):
                     else torch.float32
                 )
                 if pipeline is None:
+                    # this could be a little faster
                     pipeline = StableDiffusionPipeline.from_pretrained(
                         args.pretrained_model_name_or_path,
                         vae=AutoencoderKL.from_pretrained(

@@ -202,6 +202,7 @@ class Predictor(BasePredictor):
         #     description="Save weights every N steps.",
         # ),
     ) -> Path:
+        st = time.time()
         cog_instance_data = "cog_instance_data"
         cog_class_data = "cog_class_data"
         cog_output_dir = "checkpoints"
@@ -215,7 +216,7 @@ class Predictor(BasePredictor):
             if os.path.exists(path):
                 shutil.rmtree(path)
             os.makedirs(path)
-
+        extract_start = time.time()
         # extract zip contents, flattening any paths present within it
         with ZipFile(str(instance_data), "r") as zip_ref:
             for zip_info in zip_ref.infolist():
@@ -239,14 +240,17 @@ class Predictor(BasePredictor):
                     if mt and mt[0] and mt[0].startswith("image/"):
                         zip_info.filename = os.path.basename(zip_info.filename)
                         zip_ref.extract(zip_info, cog_class_data)
+        print(f"unziped in {time.time() - extract_start:.3f}")
 
         pretrained_model_name_or_path = "runwayml/stable-diffusion-v1-5"
         pretrained_vae_name_or_path = "runwayml/stable-diffusion-v1-5"
 
         if ckpt_base is not None:
+            download_start = time.time()
             run_cmd(
                 f"python convert_original_stable_diffusion_to_diffusers.py --checkpoint_path {ckpt_base} --dump_path {cog_custom_base_data}"
             )
+            print(f"downloaded ckpt_base in {time.time() - download_start:.3f}")
             pretrained_model_name_or_path = cog_custom_base_data
             pretrained_vae_name_or_path = f"{cog_custom_base_data}/vae"
 
@@ -305,19 +309,21 @@ class Predictor(BasePredictor):
         }
 
         args = Namespace(**args)
-
+        main_start = time.time()
         main(args)
+        print(f"ran main in {time.time() - main_start:.3f}")
 
         gc.collect()
         torch.cuda.empty_cache()
         call("nvidia-smi")
 
         out_path = "output.zip"
-
+        zip_start = time.time()
         directory = Path(cog_output_dir)
         with ZipFile(out_path, "w") as zip:
             for file_path in directory.rglob("*"):
                 print(file_path)
                 zip.write(file_path, arcname=file_path.relative_to(directory))
+        print(f"zipped output in {time.time() - zip_start.3f}")
 
         return Path(out_path)
