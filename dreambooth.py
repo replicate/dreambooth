@@ -552,15 +552,14 @@ def main(args):
                         args.pretrained_model_name_or_path,
                         # Original: pretrained sd-ve-sme
                         vae=AutoencoderKL.from_pretrained(
-                            # args.pretrained_vae_name_or_path
-                            # or args.pretrained_model_name_or_path,
-                            args.pretrained_model_name_or_path,
-                            # subfolder=None if args.pretrained_vae_name_or_path else "vae",
-                            subfolder="vae",
-                            # revision=None
-                            # if args.pretrained_vae_name_or_path
-                            # else args.revision,
-                            revision=args.revision,
+                            args.pretrained_vae_name_or_path
+                            or args.pretrained_model_name_or_path,
+                            subfolder=None
+                            if args.pretrained_vae_name_or_path
+                            else "vae",
+                            revision=None
+                            if args.pretrained_vae_name_or_path
+                            else args.revision,
                             cache_dir=vae_cache_dir,
                             local_files_only=True,
                             torch_dtype=torch_dtype,
@@ -878,15 +877,12 @@ def main(args):
                 text_encoder=text_enc_model.to(torch.float16),
                 # Original: pretrained sd-ve-sme
                 vae=AutoencoderKL.from_pretrained(
-                    # args.pretrained_vae_name_or_path
-                    # or args.pretrained_model_name_or_path,
-                    args.pretrained_model_name_or_path,
-                    # subfolder=None if args.pretrained_vae_name_or_path else "vae",
-                    subfolder="vae",
-                    # revision=None
-                    # if args.pretrained_vae_name_or_path
-                    # else args.revision,
-                    revision=args.revision,
+                    args.pretrained_vae_name_or_path
+                    or args.pretrained_model_name_or_path,
+                    subfolder=None if args.pretrained_vae_name_or_path else "vae",
+                    revision=None
+                    if args.pretrained_vae_name_or_path
+                    else args.revision,
                     cache_dir=vae_cache_dir,
                     local_files_only=True,
                 ),
