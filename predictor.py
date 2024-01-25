@@ -33,7 +33,7 @@ class Predictor(BasePredictor):
         self,
         # pretrained_model: str = Input(
         #     description="Model identifier from huggingface.co/models",
-        #     default="Yntec/epiCPhotoGasm",
+        #     default="digiplay/Photon_v1",
         # ),
         # huggingface_token: str = Input(
         #     description="Provide your huggingface token to download the models.",
@@ -235,7 +235,7 @@ class Predictor(BasePredictor):
 
         # some settings are fixed for the replicate model
         args = {
-            "pretrained_model_name_or_path": "Yntec/epiCPhotoGasm",
+            "pretrained_model_name_or_path": "digiplay/Photon_v1",
             "pretrained_vae_name_or_path": "stabilityai/sd-vae-ft-mse",
             "revision": revision,
             "tokenizer_name": None,

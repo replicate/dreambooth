@@ -22,27 +22,27 @@ os.makedirs(cache_dir, exist_ok=True)
 os.makedirs(vae_cache_dir, exist_ok=True)
 
 pipe = StableDiffusionPipeline.from_pretrained(
-    "Yntec/epiCPhotoGasm",
+    "digiplay/Photon_v1",
     cache_dir=cache_dir,
     # revision="fp16",
     torch_dtype=torch.float16,
 )
 
 tokenizer = CLIPTokenizer.from_pretrained(
-    "Yntec/epiCPhotoGasm",
+    "digiplay/Photon_v1",
     subfolder="tokenizer",
     cache_dir=cache_dir,
     # revision="fp16",
 )
 
 text_encoder = CLIPTextModel.from_pretrained(
-    "Yntec/epiCPhotoGasm",
+    "digiplay/Photon_v1",
     subfolder="text_encoder",
     cache_dir=cache_dir,
     # revision="fp16",
 )
 vae = AutoencoderKL.from_pretrained(
-    "Yntec/epiCPhotoGasm",
+    "digiplay/Photon_v1",
     subfolder="vae",
     cache_dir=cache_dir,
     # revision="fp16",
@@ -51,14 +51,14 @@ pretrained_vae = AutoencoderKL.from_pretrained(
     "stabilityai/sd-vae-ft-mse", subfolder=None, cache_dir=vae_cache_dir, revision=None
 )
 unet = UNet2DConditionModel.from_pretrained(
-    "Yntec/epiCPhotoGasm",
+    "digiplay/Photon_v1",
     subfolder="unet",
     cache_dir=cache_dir,
     # revision="fp16",
 )
 
 noise_scheduler = DDPMScheduler.from_config(
-    "Yntec/epiCPhotoGasm",
+    "digiplay/Photon_v1",
     subfolder="scheduler",
     cache_dir=cache_dir,
 )
